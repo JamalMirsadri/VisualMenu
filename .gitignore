@@ -1,0 +1,101 @@
+# =============================================================================
+# VisualMenu - Robust .gitignore
+# Protects secrets, environment files, database dumps, node_modules, & uploads
+# Keeps Prisma schema, migrations, seed, tests, docs, and Graphify outputs
+# =============================================================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs & Bundles
+dist/
+dist-ssr/
+build/
+out/
+.next/
+.nuxt/
+*.tsbuildinfo
+
+# Environment & Secrets (NEVER COMMIT SENSITIVE FILES)
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.staging
+*.env
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+*.secret
+secrets/
+credentials/
+
+# Explicitly allow template/example files
+!.env.example
+
+# Database data directories & PostgreSQL dumps (Root data directories)
+/.postgres_data/
+/postgres_data/
+*.dump
+*.pgdump
+*.backup
+*.bak
+*.sql.gz
+*.sql.tar
+*dump*.sql
+db_backup*
+
+# Media & Uploads (Never commit user uploads or media storage)
+uploads/
+uploads/*
+media/
+temp/
+tmp/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+
+# IDEs, Editors & OS Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.local
+
+# Ensure Source Code, Prisma, Tests, Documentation, and Graphify are preserved
+!src/data/
+!src/data/**
+!prisma/
+!prisma/schema.prisma
+!prisma/seed.ts
+!prisma/migrations/
+!prisma/migrations/**/*.sql
+!server/tests/
+!docs/
+!docs/**/*.md
+!graphify/
+!.graphify/

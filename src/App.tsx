@@ -1,0 +1,113 @@
+import React from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute } from './components/admin/ProtectedRoute';
+import { AdminLayout } from './components/admin/AdminLayout';
+import { AdminLoginPage } from './pages/admin/AdminLoginPage';
+import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { AdminFloorPage } from './pages/admin/AdminFloorPage';
+import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
+import { AdminKitchenPage } from './pages/admin/AdminKitchenPage';
+import { AdminTablesPage } from './pages/admin/AdminTablesPage';
+import { AdminCategoriesPage } from './pages/admin/AdminCategoriesPage';
+import { AdminFoodsPage } from './pages/admin/AdminFoodsPage';
+import { AdminMediaPage } from './pages/admin/AdminMediaPage';
+import { AdminMenuPreviewPage } from './pages/admin/AdminMenuPreviewPage';
+import { AdminRestaurantPage } from './pages/admin/AdminRestaurantPage';
+import { AdminQrPage } from './pages/admin/AdminQrPage';
+import { AdminRestaurantsPage } from './pages/admin/AdminRestaurantsPage';
+import { AdminPaymentsPage } from './pages/admin/AdminPaymentsPage';
+import { AdminCashPage } from './pages/admin/AdminCashPage';
+import { AdminCustomersPage } from './pages/admin/AdminCustomersPage';
+import { CustomerOrderTrackingPage } from './pages/customer/CustomerOrderTrackingPage';
+import { MenuPage } from './pages/MenuPage';
+import { PlatformRoute } from './components/platform/PlatformRoute';
+import { PlatformLayout } from './components/platform/PlatformLayout';
+import { PlatformDashboardPage } from './pages/platform/PlatformDashboardPage';
+import { PlatformRestaurantsPage } from './pages/platform/PlatformRestaurantsPage';
+import { PlatformRestaurantDetailPage } from './pages/platform/PlatformRestaurantDetailPage';
+import { PlatformCreateRestaurantPage } from './pages/platform/PlatformCreateRestaurantPage';
+import { PlatformUsersPage } from './pages/platform/PlatformUsersPage';
+import { PlatformAuditPage } from './pages/platform/PlatformAuditPage';
+import { PlatformSettingsPage } from './pages/platform/PlatformSettingsPage';
+import { OwnerOnboardingPage } from './pages/owner/OwnerOnboardingPage';
+import { StaffOnboardingPage } from './pages/staff/StaffOnboardingPage';
+import { AdminStaffPage } from './pages/admin/AdminStaffPage';
+import { PermissionRoute } from './components/common/PermissionRoute';
+
+export const App: React.FC = () => {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          {/* Customer Menu QR Routes */}
+          <Route path="/menu/:slug" element={<MenuPage />} />
+          <Route path="/menu/:slug/table/:tableNumber" element={<MenuPage />} />
+
+          {/* Customer Live Order Tracking */}
+          <Route path="/order/:publicOrderToken" element={<CustomerOrderTrackingPage />} />
+
+          {/* Owner & Staff Onboarding Invitation Routes */}
+          <Route path="/owner/onboarding/:token" element={<OwnerOnboardingPage />} />
+          <Route path="/staff/onboarding/:token" element={<StaffOnboardingPage />} />
+
+          {/* Admin Login Route */}
+          <Route path="/admin/login" element={<AdminLoginPage />} />
+
+          {/* Protected Admin Management Panel */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<PermissionRoute permission="VIEW_DASHBOARD"><AdminDashboard /></PermissionRoute>} />
+            <Route path="floor" element={<PermissionRoute permission="VIEW_TABLES"><AdminFloorPage /></PermissionRoute>} />
+            <Route path="orders" element={<PermissionRoute permission="VIEW_ORDERS"><AdminOrdersPage /></PermissionRoute>} />
+            <Route path="kitchen" element={<PermissionRoute permission="VIEW_KITCHEN"><AdminKitchenPage /></PermissionRoute>} />
+            <Route path="payments" element={<PermissionRoute permission="VIEW_PAYMENTS"><AdminPaymentsPage /></PermissionRoute>} />
+            <Route path="cash" element={<PermissionRoute permission="CONFIRM_CASH_PAYMENT"><AdminCashPage /></PermissionRoute>} />
+            <Route path="customers" element={<PermissionRoute permission="VIEW_CUSTOMERS"><AdminCustomersPage /></PermissionRoute>} />
+            <Route path="tables" element={<PermissionRoute permission="VIEW_TABLES"><AdminTablesPage /></PermissionRoute>} />
+            <Route path="categories" element={<PermissionRoute permission="MANAGE_CATEGORIES"><AdminCategoriesPage /></PermissionRoute>} />
+            <Route path="foods" element={<PermissionRoute permission="MANAGE_FOODS"><AdminFoodsPage /></PermissionRoute>} />
+            <Route path="media" element={<PermissionRoute permission="VIEW_MEDIA"><AdminMediaPage /></PermissionRoute>} />
+            <Route path="menu-preview" element={<PermissionRoute permission="VIEW_MENU"><AdminMenuPreviewPage /></PermissionRoute>} />
+            <Route path="staff" element={<PermissionRoute permission="VIEW_STAFF"><AdminStaffPage /></PermissionRoute>} />
+            <Route path="users" element={<PermissionRoute permission="VIEW_STAFF"><AdminStaffPage /></PermissionRoute>} />
+            <Route path="restaurants" element={<PermissionRoute permission="MANAGE_RESTAURANT_SETTINGS"><AdminRestaurantsPage /></PermissionRoute>} />
+            <Route path="restaurant" element={<PermissionRoute permission="MANAGE_RESTAURANT_SETTINGS"><AdminRestaurantPage /></PermissionRoute>} />
+            <Route path="qr" element={<PermissionRoute permission="VIEW_QR_CODES"><AdminQrPage /></PermissionRoute>} />
+          </Route>
+
+          {/* Platform SaaS Management Panel */}
+          <Route
+            path="/platform"
+            element={
+              <PlatformRoute>
+                <PlatformLayout />
+              </PlatformRoute>
+            }
+          >
+            <Route index element={<PlatformDashboardPage />} />
+            <Route path="restaurants" element={<PlatformRestaurantsPage />} />
+            <Route path="restaurants/create" element={<PlatformCreateRestaurantPage />} />
+            <Route path="restaurants/:id" element={<PlatformRestaurantDetailPage />} />
+            <Route path="users" element={<PlatformUsersPage />} />
+            <Route path="audit" element={<PlatformAuditPage />} />
+            <Route path="settings" element={<PlatformSettingsPage />} />
+          </Route>
+
+          {/* Root Redirects to demo restaurant */}
+          <Route path="/" element={<Navigate to="/menu/demo-restaurant" replace />} />
+          <Route path="*" element={<Navigate to="/menu/demo-restaurant" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+};
+
+
+export default App;
