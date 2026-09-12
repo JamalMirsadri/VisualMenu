@@ -148,6 +148,10 @@ model Restaurant {
   phone           String?
   email           String?
   address         String?
+  city            String?
+  country         String?
+  legalName       String?  @map("legal_name")
+  timezone        String?  @default("UTC")
   website         String?
   favicon         String?
   currency        String   @default("EUR")

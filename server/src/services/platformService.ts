@@ -2,6 +2,59 @@ import bcrypt from 'bcryptjs';
 import { AuditAction, PlatformRole, Prisma } from '@prisma/client';
 import { prisma } from '../prisma';
 import { AuditService } from './auditService';
+import { RestaurantProvisioningService } from './restaurantProvisioningService';
+import { normalizeTheme, normalizePresentationMode } from '../routes/settingsRoutes';
+
+export interface UpdatePlatformRestaurantInput {
+  name?: string;
+  slug?: string;
+  logo?: string | null;
+  favicon?: string | null;
+  tagline?: string | null;
+  legalName?: string | null;
+  description?: string | null;
+  address?: string | null;
+  city?: string | null;
+  country?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  currency?: string;
+  currencySymbol?: string;
+  timezone?: string | null;
+  defaultLanguage?: string;
+  theme?: string;
+  presentationMode?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  accentColor?: string;
+  textStyle?: string;
+  buttonStyle?: string;
+  backgroundStyle?: string;
+  cardStyle?: string;
+  animationStyle?: string;
+  categoryStyle?: string;
+  foodInfoPosition?: string;
+  progressIndicatorStyle?: string;
+  environmentBackground?: string;
+  tableSurface?: string;
+  lightingPreset?: string;
+  foodEntranceAnimation?: string;
+  foodExitAnimation?: string;
+  cameraMotion?: string;
+  overlayStyle?: string;
+  showPrices?: boolean;
+  showCalories?: boolean;
+  showPreparationTime?: boolean;
+  showAllergens?: boolean;
+  showIngredients?: boolean;
+  showFavoriteButton?: boolean;
+  showDetailsButton?: boolean;
+  showOrderButton?: boolean;
+  taxEnabled?: boolean;
+  taxRate?: number;
+  serviceChargeEnabled?: boolean;
+  serviceChargeRate?: number;
+}
 
 export interface ListRestaurantsParams {
   search?: string;
@@ -258,12 +311,17 @@ export class PlatformService {
         slug: restaurant.slug,
         tagline: restaurant.tagline,
         description: restaurant.description,
+        legalName: restaurant.legalName,
+        city: restaurant.city,
+        country: restaurant.country,
+        timezone: restaurant.timezone,
         logo: restaurant.logo,
         coverImage: restaurant.coverImage,
         phone: restaurant.phone,
         email: restaurant.email,
         address: restaurant.address,
         website: restaurant.website,
+        favicon: restaurant.favicon,
         currency: restaurant.currency,
         currencySymbol: restaurant.currencySymbol,
         defaultLanguage: restaurant.defaultLanguage,
@@ -337,6 +395,255 @@ export class PlatformService {
     });
 
     return updated;
+  }
+
+  /**
+   * Update restaurant details & branding transactionally with before/after audit logging
+   */
+  static async updateRestaurantDetails(
+    restaurantId: string,
+    input: UpdatePlatformRestaurantInput,
+    actorUserId: string,
+    actorPlatformRole: PlatformRole,
+    ipAddress?: string
+  ) {
+    return await prisma.$transaction(async (tx) => {
+      const current = await tx.restaurant.findUnique({
+        where: { id: restaurantId },
+        include: { settings: true },
+      });
+
+      if (!current) {
+        const err: any = new Error(`Restaurant with ID "${restaurantId}" not found.`);
+        err.statusCode = 404;
+        err.errorCode = 'RESTAURANT_NOT_FOUND';
+        throw err;
+      }
+
+      // Slug validation & uniqueness check
+      let newSlug: string | undefined;
+      if (input.slug !== undefined && input.slug.trim() !== current.slug) {
+        newSlug = RestaurantProvisioningService.normalizeSlug(input.slug);
+        const conflict = await tx.restaurant.findUnique({
+          where: { slug: newSlug },
+        });
+        if (conflict && conflict.id !== restaurantId) {
+          const err: any = new Error(`A restaurant with slug "${newSlug}" already exists.`);
+          err.statusCode = 409;
+          err.errorCode = 'SLUG_CONFLICT';
+          throw err;
+        }
+      }
+
+      // Prepare restaurant updates
+      const restaurantUpdateData: Prisma.RestaurantUpdateInput = {};
+      if (input.name !== undefined) restaurantUpdateData.name = input.name.trim();
+      if (newSlug !== undefined) restaurantUpdateData.slug = newSlug;
+      if (input.tagline !== undefined) restaurantUpdateData.tagline = input.tagline ? input.tagline.trim() : null;
+      if (input.legalName !== undefined) restaurantUpdateData.legalName = input.legalName ? input.legalName.trim() : null;
+      if (input.description !== undefined) restaurantUpdateData.description = input.description ? input.description.trim() : null;
+      if (input.logo !== undefined) restaurantUpdateData.logo = input.logo ? input.logo.trim() : null;
+      if (input.favicon !== undefined) restaurantUpdateData.favicon = input.favicon ? input.favicon.trim() : null;
+      if (input.phone !== undefined) restaurantUpdateData.phone = input.phone ? input.phone.trim() : null;
+      if (input.email !== undefined) restaurantUpdateData.email = input.email ? input.email.trim().toLowerCase() : null;
+      if (input.address !== undefined) restaurantUpdateData.address = input.address ? input.address.trim() : null;
+      if (input.city !== undefined) restaurantUpdateData.city = input.city ? input.city.trim() : null;
+      if (input.country !== undefined) restaurantUpdateData.country = input.country ? input.country.trim() : null;
+      if (input.currency !== undefined) restaurantUpdateData.currency = input.currency.trim().toUpperCase();
+      if (input.currencySymbol !== undefined) {
+        restaurantUpdateData.currencySymbol = input.currencySymbol.trim();
+      } else if (input.currency !== undefined) {
+        restaurantUpdateData.currencySymbol = input.currency === 'USD' ? '$' : input.currency === 'GBP' ? '£' : '€';
+      }
+      if (input.timezone !== undefined) restaurantUpdateData.timezone = input.timezone ? input.timezone.trim() : 'UTC';
+      if (input.defaultLanguage !== undefined) restaurantUpdateData.defaultLanguage = input.defaultLanguage.trim().toLowerCase();
+
+      const updatedRestaurant = await tx.restaurant.update({
+        where: { id: restaurantId },
+        data: restaurantUpdateData,
+      });
+
+      // Prepare settings updates
+      const settingsUpdateData: Prisma.RestaurantSettingsUpdateInput = {};
+      if (input.theme !== undefined) settingsUpdateData.theme = normalizeTheme(input.theme);
+      if (input.presentationMode !== undefined) settingsUpdateData.presentationMode = normalizePresentationMode(input.presentationMode);
+      if (input.primaryColor !== undefined) settingsUpdateData.primaryColor = input.primaryColor;
+      if (input.secondaryColor !== undefined) settingsUpdateData.secondaryColor = input.secondaryColor;
+      if (input.accentColor !== undefined) settingsUpdateData.accentColor = input.accentColor;
+      if (input.defaultLanguage !== undefined) settingsUpdateData.language = input.defaultLanguage.trim().toLowerCase();
+      if (input.textStyle !== undefined) settingsUpdateData.textStyle = input.textStyle.toUpperCase();
+      if (input.buttonStyle !== undefined) settingsUpdateData.buttonStyle = input.buttonStyle.toUpperCase();
+      if (input.backgroundStyle !== undefined) settingsUpdateData.backgroundStyle = input.backgroundStyle.toUpperCase();
+      if (input.cardStyle !== undefined) settingsUpdateData.cardStyle = input.cardStyle.toUpperCase();
+      if (input.animationStyle !== undefined) settingsUpdateData.animationStyle = input.animationStyle.toUpperCase();
+      if (input.categoryStyle !== undefined) settingsUpdateData.categoryStyle = input.categoryStyle.toUpperCase();
+      if (input.foodInfoPosition !== undefined) settingsUpdateData.foodInfoPosition = input.foodInfoPosition.toUpperCase();
+      if (input.progressIndicatorStyle !== undefined) settingsUpdateData.progressIndicatorStyle = input.progressIndicatorStyle.toUpperCase();
+      if (input.environmentBackground !== undefined) settingsUpdateData.environmentBackground = input.environmentBackground;
+      if (input.tableSurface !== undefined) settingsUpdateData.tableSurface = input.tableSurface;
+      if (input.lightingPreset !== undefined) settingsUpdateData.lightingPreset = input.lightingPreset.toUpperCase();
+      if (input.foodEntranceAnimation !== undefined) settingsUpdateData.foodEntranceAnimation = input.foodEntranceAnimation.toUpperCase();
+      if (input.foodExitAnimation !== undefined) settingsUpdateData.foodExitAnimation = input.foodExitAnimation.toUpperCase();
+      if (input.cameraMotion !== undefined) settingsUpdateData.cameraMotion = input.cameraMotion.toUpperCase();
+      if (input.overlayStyle !== undefined) settingsUpdateData.overlayStyle = input.overlayStyle.toUpperCase();
+      if (input.showPrices !== undefined) settingsUpdateData.showPrices = Boolean(input.showPrices);
+      if (input.showCalories !== undefined) settingsUpdateData.showCalories = Boolean(input.showCalories);
+      if (input.showPreparationTime !== undefined) settingsUpdateData.showPreparationTime = Boolean(input.showPreparationTime);
+      if (input.showAllergens !== undefined) settingsUpdateData.showAllergens = Boolean(input.showAllergens);
+      if (input.showIngredients !== undefined) settingsUpdateData.showIngredients = Boolean(input.showIngredients);
+      if (input.showFavoriteButton !== undefined) settingsUpdateData.showFavoriteButton = Boolean(input.showFavoriteButton);
+      if (input.showDetailsButton !== undefined) settingsUpdateData.showDetailsButton = Boolean(input.showDetailsButton);
+      if (input.showOrderButton !== undefined) settingsUpdateData.showOrderButton = Boolean(input.showOrderButton);
+      if (input.taxEnabled !== undefined) settingsUpdateData.taxEnabled = Boolean(input.taxEnabled);
+      if (input.taxRate !== undefined) settingsUpdateData.taxRate = input.taxRate;
+      if (input.serviceChargeEnabled !== undefined) settingsUpdateData.serviceChargeEnabled = Boolean(input.serviceChargeEnabled);
+      if (input.serviceChargeRate !== undefined) settingsUpdateData.serviceChargeRate = input.serviceChargeRate;
+
+      const updatedSettings = await tx.restaurantSettings.upsert({
+        where: { restaurantId },
+        update: settingsUpdateData,
+        create: {
+          restaurantId,
+          theme: input.theme ? normalizeTheme(input.theme) : 'DARK_LUXURY',
+          presentationMode: input.presentationMode ? normalizePresentationMode(input.presentationMode) : 'INDIVIDUAL_VIDEO',
+          primaryColor: input.primaryColor || '#eab308',
+          secondaryColor: input.secondaryColor || '#d97706',
+          accentColor: input.accentColor || '#f59e0b',
+          language: input.defaultLanguage || 'en',
+          textStyle: input.textStyle ? input.textStyle.toUpperCase() : 'SERIF',
+          buttonStyle: input.buttonStyle ? input.buttonStyle.toUpperCase() : 'PILL',
+          cardStyle: input.cardStyle ? input.cardStyle.toUpperCase() : 'GLASSMORPHISM',
+          categoryStyle: input.categoryStyle ? input.categoryStyle.toUpperCase() : 'PILLS',
+          backgroundStyle: input.backgroundStyle ? input.backgroundStyle.toUpperCase() : 'DARK_BLUR',
+          animationStyle: input.animationStyle ? input.animationStyle.toUpperCase() : 'CINEMATIC',
+          foodInfoPosition: input.foodInfoPosition ? input.foodInfoPosition.toUpperCase() : 'BOTTOM_OVERLAY',
+          progressIndicatorStyle: input.progressIndicatorStyle ? input.progressIndicatorStyle.toUpperCase() : 'BAR',
+          lightingPreset: input.lightingPreset ? input.lightingPreset.toUpperCase() : 'WARM',
+          environmentBackground: input.environmentBackground || 'DARK_STUDIO',
+          tableSurface: input.tableSurface || 'DARK_MARBLE',
+          foodEntranceAnimation: input.foodEntranceAnimation ? input.foodEntranceAnimation.toUpperCase() : 'SCALE',
+          foodExitAnimation: input.foodExitAnimation ? input.foodExitAnimation.toUpperCase() : 'FADE',
+          cameraMotion: input.cameraMotion ? input.cameraMotion.toUpperCase() : 'SUBTLE_ZOOM',
+          overlayStyle: input.overlayStyle ? input.overlayStyle.toUpperCase() : 'GRADIENT_BOTTOM',
+          showPrices: input.showPrices !== undefined ? Boolean(input.showPrices) : true,
+          showCalories: input.showCalories !== undefined ? Boolean(input.showCalories) : true,
+          showPreparationTime: input.showPreparationTime !== undefined ? Boolean(input.showPreparationTime) : true,
+          showAllergens: input.showAllergens !== undefined ? Boolean(input.showAllergens) : true,
+          showIngredients: input.showIngredients !== undefined ? Boolean(input.showIngredients) : true,
+          showFavoriteButton: input.showFavoriteButton !== undefined ? Boolean(input.showFavoriteButton) : true,
+          showDetailsButton: input.showDetailsButton !== undefined ? Boolean(input.showDetailsButton) : true,
+          showOrderButton: input.showOrderButton !== undefined ? Boolean(input.showOrderButton) : true,
+          taxEnabled: input.taxEnabled !== undefined ? Boolean(input.taxEnabled) : false,
+          taxRate: input.taxRate !== undefined ? input.taxRate : 0.0,
+          serviceChargeEnabled: input.serviceChargeEnabled !== undefined ? Boolean(input.serviceChargeEnabled) : false,
+          serviceChargeRate: input.serviceChargeRate !== undefined ? input.serviceChargeRate : 0.0,
+        },
+      });
+
+      // Calculate before/after diff for audit logging
+      const before: Record<string, any> = {};
+      const after: Record<string, any> = {};
+
+      const restaurantKeys = [
+        'name',
+        'slug',
+        'tagline',
+        'legalName',
+        'description',
+        'logo',
+        'favicon',
+        'phone',
+        'email',
+        'address',
+        'city',
+        'country',
+        'currency',
+        'currencySymbol',
+        'timezone',
+        'defaultLanguage',
+      ] as const;
+
+      for (const key of restaurantKeys) {
+        if ((input as any)[key] !== undefined) {
+          const oldVal = (current as any)[key] ?? null;
+          const newVal = (updatedRestaurant as any)[key] ?? null;
+          if (oldVal !== newVal) {
+            before[key] = oldVal;
+            after[key] = newVal;
+          }
+        }
+      }
+
+      const settingsKeys = [
+        'theme',
+        'presentationMode',
+        'primaryColor',
+        'secondaryColor',
+        'accentColor',
+        'textStyle',
+        'buttonStyle',
+        'backgroundStyle',
+        'cardStyle',
+        'animationStyle',
+        'categoryStyle',
+        'foodInfoPosition',
+        'progressIndicatorStyle',
+        'environmentBackground',
+        'tableSurface',
+        'lightingPreset',
+        'foodEntranceAnimation',
+        'foodExitAnimation',
+        'cameraMotion',
+        'overlayStyle',
+        'showPrices',
+        'showCalories',
+        'showPreparationTime',
+        'showAllergens',
+        'showIngredients',
+        'showFavoriteButton',
+        'showDetailsButton',
+        'showOrderButton',
+        'taxEnabled',
+        'taxRate',
+        'serviceChargeEnabled',
+        'serviceChargeRate',
+      ] as const;
+
+      for (const key of settingsKeys) {
+        if ((input as any)[key] !== undefined) {
+          const oldVal = current.settings ? (current.settings as any)[key] ?? null : null;
+          const newVal = (updatedSettings as any)[key] ?? null;
+          if (String(oldVal) !== String(newVal)) {
+            before[`settings.${key}`] = oldVal;
+            after[`settings.${key}`] = newVal;
+          }
+        }
+      }
+
+      // Record AuditLog
+      await tx.auditLog.create({
+        data: {
+          restaurantId,
+          userId: actorUserId,
+          action: AuditAction.UPDATE,
+          entityType: 'Restaurant',
+          entityId: restaurantId,
+          actorPlatformRole,
+          ipAddress: ipAddress || null,
+          metadata: {
+            action: 'UPDATE_RESTAURANT',
+            before,
+            after,
+            updatedFields: Object.keys(after),
+          },
+        },
+      });
+
+      return {
+        restaurant: updatedRestaurant,
+        settings: updatedSettings,
+      };
+    });
   }
 
   /**

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ExternalLink,
@@ -13,18 +13,36 @@ import {
   PowerOff,
   RefreshCw,
   AlertCircle,
+  Pencil,
 } from 'lucide-react';
 import { platformService } from '../../services/platformService';
 import { useAuth } from '../../context/AuthContext';
+import { PlatformEditRestaurantModal } from '../../components/platform/PlatformEditRestaurantModal';
 
 export const PlatformRestaurantDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const { enterRestaurantContext } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (searchParams.get('edit') === 'true') {
+      setIsEditModalOpen(true);
+    }
+  }, [searchParams]);
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    if (searchParams.get('edit')) {
+      searchParams.delete('edit');
+      setSearchParams(searchParams, { replace: true });
+    }
+  };
 
   const loadDetails = async () => {
     if (!id) return;
@@ -217,6 +235,15 @@ export const PlatformRestaurantDetailPage: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 shrink-0">
+            {/* Edit Restaurant Action */}
+            <button
+              onClick={() => setIsEditModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-amber-400/60 text-white font-semibold text-xs transition-all shadow-md cursor-pointer"
+            >
+              <Pencil className="w-4 h-4 text-amber-400" />
+              <span>Edit Restaurant</span>
+            </button>
+
             {/* Enter Context Action */}
             <button
               onClick={handleOpenRestaurant}
@@ -470,6 +497,17 @@ export const PlatformRestaurantDetailPage: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Edit Restaurant Modal */}
+      {data?.restaurant && (
+        <PlatformEditRestaurantModal
+          isOpen={isEditModalOpen}
+          onClose={handleCloseEditModal}
+          restaurant={data.restaurant}
+          settings={data.settings}
+          onSuccess={() => loadDetails()}
+        />
+      )}
     </div>
   );
 };

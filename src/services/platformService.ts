@@ -6,6 +6,7 @@ import type {
   PlatformAuditItem,
   PlatformSettingsData,
   PlatformRole,
+  UpdatePlatformRestaurantInput,
 } from '../types';
 
 export interface PaginatedResult<T> {
@@ -85,6 +86,18 @@ export const platformService = {
   async getRestaurantDetails(restaurantId: string): Promise<any> {
     const res = await apiClient.get<any>(`/platform/restaurants/${restaurantId}`);
     return unwrapResponse<any>(res);
+  },
+
+  async updateRestaurant(restaurantId: string, data: UpdatePlatformRestaurantInput): Promise<any> {
+    const res = await apiClient.patch<any>(`/platform/restaurants/${restaurantId}`, data);
+    return unwrapResponse<any>(res);
+  },
+
+  async uploadRestaurantAsset(restaurantId: string, file: File): Promise<{ url: string; key?: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await apiClient.post<any>(`/platform/restaurants/${restaurantId}/upload`, formData);
+    return unwrapResponse<{ url: string; key?: string }>(res);
   },
 
   async activateRestaurant(restaurantId: string, reason?: string): Promise<any> {

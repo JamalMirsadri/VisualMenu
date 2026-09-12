@@ -460,7 +460,200 @@ async function runPlatformAdminTests() {
       }
     });
 
-    // 14. Clean up created operator
+    // 14. Full Restaurant / Tenant Editing by Platform Admin
+    let originalRestaurantSnapshot: any = null;
+
+    await assert('29. Platform Admin updates restaurant specifications (name, tagline, legalName, city, country, timezone, phone, currency, defaultLanguage) via PATCH /api/platform/restaurants/:id', async () => {
+      // Snapshot original restaurant details to restore if needed
+      originalRestaurantSnapshot = await prisma.restaurant.findUnique({
+        where: { id: targetRestaurant.id },
+        include: { settings: true },
+      });
+
+      const updatePayload = {
+        name: `${originalRestaurantSnapshot.name} Edited`,
+        tagline: 'Refined Dining & Lounge',
+        legalName: 'Aura Enterprise Global Ltd',
+        city: 'London',
+        country: 'United Kingdom',
+        timezone: 'Europe/London',
+        phone: '+44 20 7946 0999',
+        currency: 'GBP',
+        defaultLanguage: 'en',
+      };
+
+      const res = await request(app)
+        .patch(`/api/platform/restaurants/${targetRestaurant.id}`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send(updatePayload);
+
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+      const updated = res.body.data.restaurant;
+      const settings = res.body.data.settings;
+      if (updated.name !== updatePayload.name) throw new Error(`Name mismatch: ${updated.name}`);
+      if (updated.legalName !== updatePayload.legalName) throw new Error(`legalName mismatch: ${updated.legalName}`);
+      if (updated.city !== updatePayload.city) throw new Error(`city mismatch: ${updated.city}`);
+      if (updated.country !== updatePayload.country) throw new Error(`country mismatch: ${updated.country}`);
+      if (updated.timezone !== updatePayload.timezone) throw new Error(`timezone mismatch: ${updated.timezone}`);
+      if (updated.phone !== updatePayload.phone) throw new Error(`phone mismatch: ${updated.phone}`);
+      if (updated.currency !== updatePayload.currency) throw new Error(`currency mismatch: ${updated.currency}`);
+      if (updated.defaultLanguage !== updatePayload.defaultLanguage) throw new Error(`defaultLanguage mismatch: ${updated.defaultLanguage}`);
+      if (settings?.language !== updatePayload.defaultLanguage) throw new Error(`settings language mismatch: ${settings?.language}`);
+
+      // Verify in DB directly
+      const dbRestaurant = await prisma.restaurant.findUnique({
+        where: { id: targetRestaurant.id },
+        include: { settings: true },
+      });
+      if (dbRestaurant?.name !== updatePayload.name) throw new Error('DB name not updated');
+      if (dbRestaurant?.legalName !== updatePayload.legalName) throw new Error('DB legalName not updated');
+      if (dbRestaurant?.city !== updatePayload.city) throw new Error('DB city not updated');
+      if (dbRestaurant?.country !== updatePayload.country) throw new Error('DB country not updated');
+      if (dbRestaurant?.timezone !== updatePayload.timezone) throw new Error('DB timezone not updated');
+      if (dbRestaurant?.phone !== updatePayload.phone) throw new Error('DB phone not updated');
+      if (dbRestaurant?.currency !== updatePayload.currency) throw new Error('DB currency not updated');
+      if (dbRestaurant?.defaultLanguage !== updatePayload.defaultLanguage) throw new Error('DB defaultLanguage not updated');
+      if (dbRestaurant?.settings?.language !== updatePayload.defaultLanguage) throw new Error('DB settings language not updated');
+    });
+
+    await assert('30. Attempting to update slug to an existing restaurant slug returns 409 SLUG_CONFLICT', async () => {
+      // Find or create another restaurant to get a colliding slug
+      const otherRestaurant = await prisma.restaurant.findFirst({
+        where: { id: { not: targetRestaurant.id } },
+      });
+      if (!otherRestaurant) {
+        throw new Error('At least 2 restaurants required to test slug collision');
+      }
+
+      const res = await request(app)
+        .patch(`/api/platform/restaurants/${targetRestaurant.id}`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ slug: otherRestaurant.slug });
+
+      if (res.status !== 409) throw new Error(`Expected 409, got ${res.status}`);
+      const code = res.body.errorCode || res.body.code;
+      if (code !== 'SLUG_CONFLICT') {
+        throw new Error(`Expected SLUG_CONFLICT, got ${code}`);
+      }
+    });
+
+    await assert('31. Platform Admin updates slug to a unique slug successfully and updates public routing', async () => {
+      const newSlug = `test-unique-slug-${Date.now()}`;
+      const res = await request(app)
+        .patch(`/api/platform/restaurants/${targetRestaurant.id}`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({ slug: newSlug });
+
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+      if (res.body.data.restaurant.slug !== newSlug) throw new Error(`Slug mismatch: ${res.body.data.restaurant.slug}`);
+
+      const dbCheck = await prisma.restaurant.findUnique({ where: { slug: newSlug } });
+      if (!dbCheck || dbCheck.id !== targetRestaurant.id) throw new Error('Restaurant not found by new slug in DB');
+
+      // Revert back to original slug for test idempotency
+      await prisma.restaurant.update({
+        where: { id: targetRestaurant.id },
+        data: { slug: originalRestaurantSnapshot.slug },
+      });
+    });
+
+    await assert('32. Platform Admin updates theme/presentation defaults transactionally', async () => {
+      const res = await request(app)
+        .patch(`/api/platform/restaurants/${targetRestaurant.id}`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({
+          theme: 'LIGHT_MINIMAL',
+          presentationMode: 'VISUAL_IMAGE',
+          primaryColor: '#10b981',
+          accentColor: '#059669',
+        });
+
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}: ${JSON.stringify(res.body)}`);
+      if (res.body.data.settings.theme !== 'LIGHT_MINIMAL') throw new Error(`Theme mismatch: ${res.body.data.settings.theme}`);
+      if (res.body.data.settings.presentationMode !== 'VISUAL_IMAGE') throw new Error(`Presentation mode mismatch: ${res.body.data.settings.presentationMode}`);
+
+      const dbSettings = await prisma.restaurantSettings.findUnique({
+        where: { restaurantId: targetRestaurant.id },
+      });
+      if (dbSettings?.theme !== 'LIGHT_MINIMAL') throw new Error('DB settings theme not updated');
+      if (dbSettings?.presentationMode !== 'VISUAL_IMAGE') throw new Error('DB settings presentationMode not updated');
+      if (dbSettings?.primaryColor !== '#10b981') throw new Error('DB settings primaryColor not updated');
+      if (dbSettings?.accentColor !== '#059669') throw new Error('DB settings accentColor not updated');
+    });
+
+    await assert('33. Non-Platform-Admin (Viewer, Support, Owner) is rejected with 403 PLATFORM_ACCESS_DENIED when editing restaurant', async () => {
+      // Test Platform Viewer
+      const viewerRes = await request(app)
+        .patch(`/api/platform/restaurants/${targetRestaurant.id}`)
+        .set('Authorization', `Bearer ${platformViewerToken}`)
+        .send({ name: 'Hacked by Viewer' });
+      if (viewerRes.status !== 403) throw new Error(`Expected 403 for Viewer, got ${viewerRes.status}`);
+
+      // Test Platform Support
+      const supportRes = await request(app)
+        .patch(`/api/platform/restaurants/${targetRestaurant.id}`)
+        .set('Authorization', `Bearer ${platformSupportToken}`)
+        .send({ name: 'Hacked by Support' });
+      if (supportRes.status !== 403) throw new Error(`Expected 403 for Support, got ${supportRes.status}`);
+
+      // Test Restaurant Owner
+      const ownerRes = await request(app)
+        .patch(`/api/platform/restaurants/${targetRestaurant.id}`)
+        .set('Authorization', `Bearer ${restaurantOwnerToken}`)
+        .send({ name: 'Hacked by Owner' });
+      if (ownerRes.status !== 403) throw new Error(`Expected 403 for Owner, got ${ownerRes.status}`);
+    });
+
+    await assert('34. Audit log captures UPDATE action with before and after metadata for Restaurant changes', async () => {
+      const auditRecord = await prisma.auditLog.findFirst({
+        where: {
+          restaurantId: targetRestaurant.id,
+          action: 'UPDATE',
+          entityType: 'Restaurant',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (!auditRecord) throw new Error('UPDATE audit log record for Restaurant not found');
+      const meta = auditRecord.metadata as any;
+      if (!meta || !meta.before || !meta.after || !Array.isArray(meta.updatedFields)) {
+        throw new Error(`Audit log metadata missing before/after/updatedFields: ${JSON.stringify(meta)}`);
+      }
+      if (meta.updatedFields.length === 0) {
+        throw new Error('Audit log updatedFields is empty');
+      }
+
+      // Restore original restaurant snapshot
+      if (originalRestaurantSnapshot) {
+        await prisma.restaurant.update({
+          where: { id: targetRestaurant.id },
+          data: {
+            name: originalRestaurantSnapshot.name,
+            tagline: originalRestaurantSnapshot.tagline,
+            legalName: originalRestaurantSnapshot.legalName,
+            city: originalRestaurantSnapshot.city,
+            country: originalRestaurantSnapshot.country,
+            timezone: originalRestaurantSnapshot.timezone,
+            phone: originalRestaurantSnapshot.phone,
+            currency: originalRestaurantSnapshot.currency,
+          },
+        });
+        if (originalRestaurantSnapshot.settings) {
+          await prisma.restaurantSettings.update({
+            where: { restaurantId: targetRestaurant.id },
+            data: {
+              theme: originalRestaurantSnapshot.settings.theme,
+              presentationMode: originalRestaurantSnapshot.settings.presentationMode,
+              defaultLanguage: originalRestaurantSnapshot.settings.defaultLanguage,
+              bannerColor: originalRestaurantSnapshot.settings.bannerColor,
+              accentColor: originalRestaurantSnapshot.settings.accentColor,
+            },
+          });
+        }
+      }
+    });
+
+    // 15. Clean up created operator
     if (createdOperatorId) {
       await prisma.user.delete({ where: { id: createdOperatorId } }).catch(() => {});
     }

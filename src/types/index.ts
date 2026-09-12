@@ -339,15 +339,20 @@ export interface Restaurant {
   name: string;
   slug: string;
   tagline: string;
+  legalName?: string;
   logo: string;
   coverImage?: string;
   description: string;
   phone: string;
   address: string;
+  city?: string;
+  country?: string;
+  timezone?: string;
   website: string;
   currency: string;
   currencySymbol: string;
   primaryLanguage: string;
+  defaultLanguage?: string;
   secondaryLanguage: string;
   openingHours: string;
   active?: boolean;
@@ -488,8 +493,16 @@ export interface PlatformRestaurantItem {
   name: string;
   slug: string;
   tagline?: string | null;
+  legalName?: string | null;
+  description?: string | null;
   logo?: string | null;
+  favicon?: string | null;
+  phone?: string | null;
+  email?: string | null;
   address?: string | null;
+  city?: string | null;
+  country?: string | null;
+  timezone?: string | null;
   currency: string;
   currencySymbol: string;
   defaultLanguage: string;
@@ -507,6 +520,57 @@ export interface PlatformRestaurantItem {
   tableCount: number;
   orderCount: number;
   userCount: number;
+}
+
+export interface UpdatePlatformRestaurantInput {
+  name?: string;
+  slug?: string;
+  logo?: string | null;
+  favicon?: string | null;
+  tagline?: string | null;
+  legalName?: string | null;
+  description?: string | null;
+  address?: string | null;
+  city?: string | null;
+  country?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  currency?: string;
+  currencySymbol?: string;
+  timezone?: string | null;
+  defaultLanguage?: string;
+  theme?: string;
+  presentationMode?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  accentColor?: string;
+  textStyle?: string;
+  buttonStyle?: string;
+  backgroundStyle?: string;
+  cardStyle?: string;
+  animationStyle?: string;
+  categoryStyle?: string;
+  foodInfoPosition?: string;
+  progressIndicatorStyle?: string;
+  environmentBackground?: string;
+  tableSurface?: string;
+  lightingPreset?: string;
+  foodEntranceAnimation?: string;
+  foodExitAnimation?: string;
+  cameraMotion?: string;
+  overlayStyle?: string;
+  showPrices?: boolean;
+  showCalories?: boolean;
+  showPreparationTime?: boolean;
+  showAllergens?: boolean;
+  showIngredients?: boolean;
+  showFavoriteButton?: boolean;
+  showDetailsButton?: boolean;
+  showOrderButton?: boolean;
+  taxEnabled?: boolean;
+  taxRate?: number;
+  serviceChargeEnabled?: boolean;
+  serviceChargeRate?: number;
 }
 
 export interface PlatformAuditItem {

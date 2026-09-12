@@ -20,8 +20,10 @@ class ApiClient {
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('aura_admin_token') : null;
 
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     };
@@ -53,25 +55,28 @@ class ApiClient {
   }
 
   post<T>(endpoint: string, body?: any, headers?: HeadersInit): Promise<T> {
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
     return this.request<T>(endpoint, {
       method: 'POST',
-      body: body ? JSON.stringify(body) : undefined,
+      body: isFormData ? body : body ? JSON.stringify(body) : undefined,
       headers,
     });
   }
 
   put<T>(endpoint: string, body?: any, headers?: HeadersInit): Promise<T> {
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
     return this.request<T>(endpoint, {
       method: 'PUT',
-      body: body ? JSON.stringify(body) : undefined,
+      body: isFormData ? body : body ? JSON.stringify(body) : undefined,
       headers,
     });
   }
 
   patch<T>(endpoint: string, body?: any, headers?: HeadersInit): Promise<T> {
+    const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
     return this.request<T>(endpoint, {
       method: 'PATCH',
-      body: body ? JSON.stringify(body) : undefined,
+      body: isFormData ? body : body ? JSON.stringify(body) : undefined,
       headers,
     });
   }

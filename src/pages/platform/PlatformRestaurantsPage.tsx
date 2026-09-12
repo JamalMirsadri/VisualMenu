@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   XCircle,
   Plus,
+  Pencil,
 } from 'lucide-react';
 import { platformService } from '../../services/platformService';
 import type { PlatformRestaurantItem } from '../../types';
@@ -301,6 +302,15 @@ export const PlatformRestaurantsPage: React.FC = () => {
                           title="View Tenant Metrics & Members"
                         >
                           <Eye className="w-4 h-4" />
+                        </Link>
+
+                        {/* Edit Restaurant Link */}
+                        <Link
+                          to={`/platform/restaurants/${r.id}?edit=true`}
+                          className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-400 hover:text-amber-300 transition-colors"
+                          title="Edit Restaurant Tenant"
+                        >
+                          <Pencil className="w-4 h-4" />
                         </Link>
 
                         {/* Activate / Deactivate Toggle */}

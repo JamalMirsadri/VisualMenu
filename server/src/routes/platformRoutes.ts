@@ -1,9 +1,18 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { PlatformRole, AuditAction } from '@prisma/client';
+import multer from 'multer';
 import { PlatformService } from '../services/platformService';
 import { RestaurantProvisioningService } from '../services/restaurantProvisioningService';
 import { requirePlatformRole } from '../middleware/authMiddleware';
 import { validateUuidParams } from '../middleware/validation';
+import { getStorageProvider } from '../services/storageProvider';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for branding assets
+  },
+});
 
 export const platformRouter = Router();
 
@@ -196,6 +205,154 @@ platformRouter.get(
         return;
       }
       res.json({ success: true, data: details });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * PATCH /api/platform/restaurants/:id
+ * Edit complete restaurant-level specifications and branding defaults (PLATFORM_ADMIN only)
+ */
+platformRouter.patch(
+  '/restaurants/:id',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await PlatformService.updateRestaurantDetails(
+        req.params.id,
+        req.body,
+        req.user!.id,
+        req.user!.platformRole!,
+        req.ip
+      );
+
+      res.json({
+        success: true,
+        message: `Restaurant "${result.restaurant.name}" updated successfully.`,
+        data: result,
+      });
+    } catch (err: any) {
+      if (err.errorCode === 'SLUG_CONFLICT' || err.statusCode === 409) {
+        res.status(409).json({
+          success: false,
+          errorCode: 'SLUG_CONFLICT',
+          message: err.message || 'A restaurant with this slug already exists.',
+        });
+        return;
+      }
+      if (err.statusCode || err.errorCode) {
+        res.status(err.statusCode || 400).json({
+          success: false,
+          errorCode: err.errorCode || 'UPDATE_ERROR',
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+platformRouter.put(
+  '/restaurants/:id',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await PlatformService.updateRestaurantDetails(
+        req.params.id,
+        req.body,
+        req.user!.id,
+        req.user!.platformRole!,
+        req.ip
+      );
+
+      res.json({
+        success: true,
+        message: `Restaurant "${result.restaurant.name}" updated successfully.`,
+        data: result,
+      });
+    } catch (err: any) {
+      if (err.errorCode === 'SLUG_CONFLICT' || err.statusCode === 409) {
+        res.status(409).json({
+          success: false,
+          errorCode: 'SLUG_CONFLICT',
+          message: err.message || 'A restaurant with this slug already exists.',
+        });
+        return;
+      }
+      if (err.statusCode || err.errorCode) {
+        res.status(err.statusCode || 400).json({
+          success: false,
+          errorCode: err.errorCode || 'UPDATE_ERROR',
+          message: err.message,
+        });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/platform/restaurants/:id/upload
+ * Upload restaurant logo or favicon using MediaStorageProvider (PLATFORM_ADMIN only)
+ */
+platformRouter.post(
+  '/restaurants/:id/upload',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  upload.single('file'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      let buffer: Buffer;
+      let filename: string;
+      let mimeType: string;
+
+      if (req.file) {
+        buffer = req.file.buffer;
+        filename = req.file.originalname;
+        mimeType = req.file.mimetype;
+      } else {
+        const { fileBase64, filename: baseFilename, mimeType: baseMimeType } = req.body;
+        if (!fileBase64 || !baseFilename || !baseMimeType) {
+          res.status(400).json({
+            success: false,
+            errorCode: 'VALIDATION_ERROR',
+            message: 'A file binary or fileBase64 is required for asset upload.',
+          });
+          return;
+        }
+        const base64Data = fileBase64.includes(',') ? fileBase64.split(',')[1] : fileBase64;
+        buffer = Buffer.from(base64Data, 'base64');
+        filename = baseFilename;
+        mimeType = baseMimeType;
+      }
+
+      const storage = getStorageProvider();
+      const uploadResult = await storage.upload(
+        {
+          buffer,
+          originalname: filename,
+          mimetype: mimeType,
+        },
+        { folder: `restaurants/${id}/branding` }
+      );
+
+      res.status(201).json({
+        success: true,
+        message: 'Asset uploaded successfully.',
+        data: {
+          url: uploadResult.url,
+          key: uploadResult.key,
+          size: uploadResult.size,
+          mimeType: uploadResult.mimeType,
+        },
+      });
     } catch (err) {
       next(err);
     }
