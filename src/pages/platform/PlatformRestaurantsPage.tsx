@@ -52,8 +52,9 @@ export const PlatformRestaurantsPage: React.FC = () => {
         limit,
       });
 
-      setRestaurants(data.items || []);
-      setTotal(data.total || 0);
+      const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+      setRestaurants(items);
+      setTotal(typeof data?.total === 'number' ? data.total : items.length);
     } catch (err: any) {
       console.error('Failed to load restaurants:', err);
       setError(err.message || 'Failed to load restaurants');

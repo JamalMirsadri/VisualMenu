@@ -11,7 +11,7 @@ class ApiClient {
   constructor(baseUrl?: string) {
     this.baseUrl =
       baseUrl ||
-      (import.meta.env.VITE_API_URL as string) ||
+      (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) ||
       '/api';
   }
 

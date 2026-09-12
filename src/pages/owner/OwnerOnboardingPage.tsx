@@ -45,8 +45,9 @@ export const OwnerOnboardingPage: React.FC = () => {
         setLoading(true);
         setError(null);
         const res = await ownerInvitationService.getInvitation(token);
-        setInvitationData(res.data);
-        setOwnerName(res.data.invitedName || '');
+        const invitation = res?.data ?? res;
+        setInvitationData(invitation);
+        setOwnerName(invitation?.invitedName || '');
       } catch (err: any) {
         console.error('Failed to validate invitation token:', err);
         setError(err.message || 'Invalid, expired, or revoked invitation token.');
@@ -79,10 +80,11 @@ export const OwnerOnboardingPage: React.FC = () => {
       });
 
       // Save token and restaurant context in localStorage
-      if (res.data?.token) {
-        localStorage.setItem('auth_token', res.data.token);
+      const session = res?.data ?? res;
+      if (session?.token) {
+        localStorage.setItem('auth_token', session.token);
         if (loginWithToken) {
-          await loginWithToken(res.data.token, res.data.user);
+          await loginWithToken(session.token, session.user);
         }
       }
 

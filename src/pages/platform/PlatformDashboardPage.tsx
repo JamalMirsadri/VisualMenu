@@ -31,8 +31,13 @@ export const PlatformDashboardPage: React.FC = () => {
         platformService.getMetrics(),
         platformService.listRestaurants({ page: 1, limit: 5 }),
       ]);
-      setMetrics(metricsData);
-      setRecentRestaurants(restaurantsData.items || []);
+      setMetrics(metricsData || null);
+      const items = Array.isArray(restaurantsData?.items)
+        ? restaurantsData.items
+        : Array.isArray(restaurantsData)
+          ? restaurantsData
+          : [];
+      setRecentRestaurants(items);
     } catch (err: any) {
       console.error('Failed to load platform dashboard data:', err);
       setError(err.message || 'Failed to load platform dashboard data');

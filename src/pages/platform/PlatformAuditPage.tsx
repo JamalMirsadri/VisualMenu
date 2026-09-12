@@ -29,8 +29,9 @@ export const PlatformAuditPage: React.FC = () => {
         page,
         limit,
       });
-      setLogs(data.items || []);
-      setTotal(data.total || 0);
+      const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+      setLogs(items);
+      setTotal(typeof data?.total === 'number' ? data.total : items.length);
     } catch (err: any) {
       console.error('Failed to load audit logs:', err);
       setError(err.message || 'Failed to load platform audit trail');

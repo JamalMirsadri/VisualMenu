@@ -16,10 +16,52 @@ export interface PaginatedResult<T> {
   totalPages: number;
 }
 
+export function unwrapResponse<T>(res: any): T {
+  if (res && typeof res === 'object' && 'data' in res && res.data !== undefined) {
+    return res.data as T;
+  }
+  return res as T;
+}
+
+export function normalizePaginatedResult<T>(res: any): PaginatedResult<T> {
+  const unwrapped = unwrapResponse<any>(res);
+  if (!unwrapped || typeof unwrapped !== 'object') {
+    return {
+      items: [],
+      total: 0,
+      page: 1,
+      limit: 10,
+      totalPages: 1,
+    };
+  }
+
+  const items = Array.isArray(unwrapped.items)
+    ? unwrapped.items
+    : Array.isArray(unwrapped)
+      ? unwrapped
+      : [];
+
+  const limit = typeof unwrapped.limit === 'number' && unwrapped.limit > 0 ? unwrapped.limit : 10;
+  const total = typeof unwrapped.total === 'number' ? unwrapped.total : items.length;
+  const page = typeof unwrapped.page === 'number' && unwrapped.page > 0 ? unwrapped.page : 1;
+  const totalPages =
+    typeof unwrapped.totalPages === 'number' && unwrapped.totalPages > 0
+      ? unwrapped.totalPages
+      : Math.ceil(total / limit) || 1;
+
+  return {
+    items,
+    total,
+    page,
+    limit,
+    totalPages,
+  };
+}
+
 export const platformService = {
   async getMetrics(): Promise<PlatformMetrics> {
-    const res = await apiClient.get<{ success: boolean; data: PlatformMetrics }>('/platform/metrics');
-    return res.data;
+    const res = await apiClient.get<any>('/platform/metrics');
+    return unwrapResponse<PlatformMetrics>(res);
   },
 
   async listRestaurants(params: {
@@ -36,29 +78,29 @@ export const platformService = {
 
     const qs = searchParams.toString();
     const url = `/platform/restaurants${qs ? `?${qs}` : ''}`;
-    const res = await apiClient.get<{ success: boolean; data: PaginatedResult<PlatformRestaurantItem> }>(url);
-    return res.data;
+    const res = await apiClient.get<any>(url);
+    return normalizePaginatedResult<PlatformRestaurantItem>(res);
   },
 
   async getRestaurantDetails(restaurantId: string): Promise<any> {
-    const res = await apiClient.get<{ success: boolean; data: any }>(`/platform/restaurants/${restaurantId}`);
-    return res.data;
+    const res = await apiClient.get<any>(`/platform/restaurants/${restaurantId}`);
+    return unwrapResponse<any>(res);
   },
 
   async activateRestaurant(restaurantId: string, reason?: string): Promise<any> {
-    const res = await apiClient.post<{ success: boolean; data: any }>(
+    const res = await apiClient.post<any>(
       `/platform/restaurants/${restaurantId}/activate`,
       { reason }
     );
-    return res.data;
+    return unwrapResponse<any>(res);
   },
 
   async deactivateRestaurant(restaurantId: string, reason?: string): Promise<any> {
-    const res = await apiClient.post<{ success: boolean; data: any }>(
+    const res = await apiClient.post<any>(
       `/platform/restaurants/${restaurantId}/deactivate`,
       { reason }
     );
-    return res.data;
+    return unwrapResponse<any>(res);
   },
 
   async setRestaurantStatus(restaurantId: string, active: boolean, reason?: string): Promise<any> {
@@ -99,8 +141,8 @@ export const platformService = {
 
     const qs = searchParams.toString();
     const url = `/platform/users${qs ? `?${qs}` : ''}`;
-    const res = await apiClient.get<{ success: boolean; data: PaginatedResult<PlatformUser> }>(url);
-    return res.data;
+    const res = await apiClient.get<any>(url);
+    return normalizePaginatedResult<PlatformUser>(res);
   },
 
   async createUser(data: {
@@ -109,21 +151,21 @@ export const platformService = {
     password: string;
     platformRole: PlatformRole;
   }): Promise<PlatformUser> {
-    const res = await apiClient.post<{ success: boolean; data: PlatformUser }>('/platform/users', data);
-    return res.data;
+    const res = await apiClient.post<any>('/platform/users', data);
+    return unwrapResponse<PlatformUser>(res);
   },
 
   async updateUser(
     id: string,
     data: { platformRole?: PlatformRole; active?: boolean; name?: string }
   ): Promise<PlatformUser> {
-    const res = await apiClient.patch<{ success: boolean; data: PlatformUser }>(`/platform/users/${id}`, data);
-    return res.data;
+    const res = await apiClient.patch<any>(`/platform/users/${id}`, data);
+    return unwrapResponse<PlatformUser>(res);
   },
 
   async deactivateUser(id: string): Promise<any> {
-    const res = await apiClient.delete<{ success: boolean; data: any }>(`/platform/users/${id}`);
-    return res.data;
+    const res = await apiClient.delete<any>(`/platform/users/${id}`);
+    return unwrapResponse<any>(res);
   },
 
   async listAuditLogs(params: {
@@ -148,62 +190,58 @@ export const platformService = {
 
     const qs = searchParams.toString();
     const url = `/platform/audit${qs ? `?${qs}` : ''}`;
-    const res = await apiClient.get<{ success: boolean; data: PaginatedResult<PlatformAuditItem> }>(url);
-    return res.data;
+    const res = await apiClient.get<any>(url);
+    return normalizePaginatedResult<PlatformAuditItem>(res);
   },
 
   async getSettings(): Promise<PlatformSettingsData> {
-    const res = await apiClient.get<{ success: boolean; data: PlatformSettingsData }>('/platform/settings');
-    return res.data;
+    const res = await apiClient.get<any>('/platform/settings');
+    return unwrapResponse<PlatformSettingsData>(res);
   },
 
   async updateSettings(data: Partial<PlatformSettingsData>): Promise<PlatformSettingsData> {
-    const res = await apiClient.patch<{ success: boolean; data: PlatformSettingsData }>('/platform/settings', data);
-    return res.data;
+    const res = await apiClient.patch<any>('/platform/settings', data);
+    return unwrapResponse<PlatformSettingsData>(res);
   },
 
   async provisionRestaurant(data: any): Promise<any> {
-    const res = await apiClient.post<{ success: boolean; message: string; data: any }>(
-      '/platform/restaurants',
-      data
-    );
-    return res.data;
+    const res = await apiClient.post<any>('/platform/restaurants', data);
+    return unwrapResponse<any>(res);
   },
 
   async getProvisioningDetails(restaurantId: string): Promise<any> {
-    const res = await apiClient.get<{ success: boolean; data: any }>(
+    const res = await apiClient.get<any>(
       `/platform/restaurants/${restaurantId}/provisioning`
     );
-    return res.data;
+    return unwrapResponse<any>(res);
   },
 
   async resendInvitation(restaurantId: string): Promise<any> {
-    const res = await apiClient.post<{ success: boolean; message: string; data: any }>(
+    const res = await apiClient.post<any>(
       `/platform/restaurants/${restaurantId}/invitation/resend`
     );
-    return res.data;
+    return unwrapResponse<any>(res);
   },
 
   async revokeInvitation(restaurantId: string): Promise<any> {
-    const res = await apiClient.post<{ success: boolean; message: string; data: any }>(
+    const res = await apiClient.post<any>(
       `/platform/restaurants/${restaurantId}/invitation/revoke`
     );
-    return res.data;
+    return unwrapResponse<any>(res);
   },
 };
 
 export const ownerInvitationService = {
   async getInvitation(token: string): Promise<any> {
-    const res = await apiClient.get<{ success: boolean; data: any }>(`/owner/invitations/${token}`);
-    return res.data;
+    const res = await apiClient.get<any>(`/owner/invitations/${token}`);
+    const data = unwrapResponse<any>(res);
+    return { data, ...(data && typeof data === 'object' ? data : {}) };
   },
 
   async acceptInvitation(token: string, data: { password: string; name?: string }): Promise<any> {
-    const res = await apiClient.post<{ success: boolean; message: string; data: any }>(
-      `/owner/invitations/${token}/accept`,
-      data
-    );
-    return res.data;
+    const res = await apiClient.post<any>(`/owner/invitations/${token}/accept`, data);
+    const dataResult = unwrapResponse<any>(res);
+    return { data: dataResult, ...(dataResult && typeof dataResult === 'object' ? dataResult : {}) };
   },
 };
 

@@ -602,7 +602,7 @@ async function main() {
 
   // 6b. Seed Deterministic Platform Users (SaaS Scope — No restaurant membership required)
   const platformUsers = [
-    { email: 'platformAdmin@auramenu.com', name: 'Alexander Wright', platformRole: PlatformRole.PLATFORM_ADMIN },
+    { email: 'platformadmin@auramenu.com', name: 'Alexander Wright', platformRole: PlatformRole.PLATFORM_ADMIN },
     { email: 'support@auramenu.com', name: 'Elena Gomez', platformRole: PlatformRole.PLATFORM_SUPPORT },
     { email: 'viewer@auramenu.com', name: 'Marcus Sterling', platformRole: PlatformRole.PLATFORM_VIEWER },
   ];

@@ -38,7 +38,8 @@ export const PlatformUsersPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const data = await platformService.listUsers();
-      setUsers(data.items || []);
+      const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+      setUsers(items);
     } catch (err: any) {
       console.error('Failed to load platform users:', err);
       setError(err.message || 'Failed to load platform operators');

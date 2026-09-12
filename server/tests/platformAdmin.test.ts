@@ -2,6 +2,7 @@ import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { PlatformRole } from '@prisma/client';
+import { normalizePaginatedResult, unwrapResponse } from '../../src/services/platformService';
 
 async function runPlatformAdminTests() {
   console.log('🧪 Starting Phase 9 Platform Admin & Multi-Tenant Control Test Suite...\n');
@@ -321,7 +322,145 @@ async function runPlatformAdminTests() {
       if (!Array.isArray(res.body.data)) throw new Error('Expected array of food items');
     });
 
-    // 13. Clean up created operator
+    // 13. Platform Admin Contract & Shape Regressions (All 4 Pages)
+    await assert('24. [Regression] Platform Dashboard consumes consistent metrics and paginated restaurants', async () => {
+      // Metric shape verification
+      const metricsRes = await request(app)
+        .get('/api/platform/metrics')
+        .set('Authorization', `Bearer ${platformAdminToken}`);
+      if (metricsRes.status !== 200) throw new Error(`Metrics HTTP ${metricsRes.status}`);
+      const metrics = unwrapResponse<any>(metricsRes.body);
+      if (!metrics || typeof metrics.totalRestaurants !== 'number') {
+        throw new Error('Platform Dashboard metrics response mismatch or missing fields');
+      }
+
+      // Recent restaurants feed shape verification
+      const restaurantsRes = await request(app)
+        .get('/api/platform/restaurants?page=1&limit=5')
+        .set('Authorization', `Bearer ${platformAdminToken}`);
+      if (restaurantsRes.status !== 200) throw new Error(`Restaurants HTTP ${restaurantsRes.status}`);
+      const paginated = normalizePaginatedResult<any>(restaurantsRes.body);
+      if (!Array.isArray(paginated.items)) {
+        throw new Error('Platform Dashboard recent restaurants items must be an array');
+      }
+      if (paginated.items.length > 5) {
+        throw new Error(`Expected limit 5, got ${paginated.items.length}`);
+      }
+      // Verify safe mapping without undefined error
+      const mapped = paginated.items.map((r: any) => r.id);
+      if (!Array.isArray(mapped)) throw new Error('Failed to map restaurant items');
+    });
+
+    await assert('25. [Regression] Tenants & Restaurants page handles populated and empty results defensively', async () => {
+      // Populated list check
+      const res = await request(app)
+        .get('/api/platform/restaurants?page=1&limit=10')
+        .set('Authorization', `Bearer ${platformAdminToken}`);
+      if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+      const paginated = normalizePaginatedResult<any>(res.body);
+      if (!Array.isArray(paginated.items) || paginated.items.length === 0) {
+        throw new Error('Expected non-empty items array for active tenants');
+      }
+
+      // Empty search check
+      const emptyRes = await request(app)
+        .get('/api/platform/restaurants?search=definitely_nonexistent_tenant_query_xyz')
+        .set('Authorization', `Bearer ${platformAdminToken}`);
+      if (emptyRes.status !== 200) throw new Error(`Empty search HTTP ${emptyRes.status}`);
+      const emptyPaginated = normalizePaginatedResult<any>(emptyRes.body);
+      if (!Array.isArray(emptyPaginated.items) || emptyPaginated.items.length !== 0) {
+        throw new Error('Expected items to be an empty array []');
+      }
+      if (emptyPaginated.total !== 0) {
+        throw new Error(`Expected total 0, got ${emptyPaginated.total}`);
+      }
+      // Defensive mapping test: must not throw
+      const mapped = emptyPaginated.items.map((r: any) => r.name);
+      if (mapped.length !== 0) throw new Error('Unexpected mapped length');
+    });
+
+    await assert('26. [Regression] Platform Operators page handles populated and empty results defensively', async () => {
+      // Operators list check
+      const res = await request(app)
+        .get('/api/platform/users?page=1&limit=10')
+        .set('Authorization', `Bearer ${platformAdminToken}`);
+      if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+      const paginated = normalizePaginatedResult<any>(res.body);
+      if (!Array.isArray(paginated.items) || paginated.items.length === 0) {
+        throw new Error('Expected non-empty items array for platform operators');
+      }
+
+      // Empty search check
+      const emptyRes = await request(app)
+        .get('/api/platform/users?search=nonexistent_operator_xyz@auramenu.com')
+        .set('Authorization', `Bearer ${platformAdminToken}`);
+      if (emptyRes.status !== 200) throw new Error(`Empty users search HTTP ${emptyRes.status}`);
+      const emptyPaginated = normalizePaginatedResult<any>(emptyRes.body);
+      if (!Array.isArray(emptyPaginated.items) || emptyPaginated.items.length !== 0) {
+        throw new Error('Expected operators items to be empty array []');
+      }
+      // Defensive mapping test
+      const roles = emptyPaginated.items.map((u: any) => u.platformRole);
+      if (roles.length !== 0) throw new Error('Unexpected roles mapped length');
+    });
+
+    await assert('27. [Regression] Platform Audit Log page handles populated and empty results defensively', async () => {
+      // Audit logs check
+      const res = await request(app)
+        .get('/api/platform/audit?page=1&limit=10')
+        .set('Authorization', `Bearer ${platformAdminToken}`);
+      if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
+      const paginated = normalizePaginatedResult<any>(res.body);
+      if (!Array.isArray(paginated.items)) {
+        throw new Error('Expected items array for audit logs');
+      }
+
+      // Filter with 0 matches
+      const emptyRes = await request(app)
+        .get('/api/platform/audit?entityType=NonExistentEntityName99999')
+        .set('Authorization', `Bearer ${platformAdminToken}`);
+      if (emptyRes.status !== 200) throw new Error(`Empty audit HTTP ${emptyRes.status}`);
+      const emptyPaginated = normalizePaginatedResult<any>(emptyRes.body);
+      if (!Array.isArray(emptyPaginated.items) || emptyPaginated.items.length !== 0) {
+        throw new Error('Expected audit items to be empty array []');
+      }
+      // Defensive mapping test
+      const actions = emptyPaginated.items.map((a: any) => a.action);
+      if (actions.length !== 0) throw new Error('Unexpected actions mapped length');
+    });
+
+    await assert('28. [Regression] Client normalization prevents "Cannot read properties of undefined (reading items)" across all edge cases', async () => {
+      const edgeCases: any[] = [
+        undefined,
+        null,
+        {},
+        { data: undefined },
+        { data: null },
+        { items: undefined },
+        { data: { items: null } },
+        [],
+        [{ id: 'item1' }],
+        { data: { items: [{ id: 'item2' }], total: 1 } },
+      ];
+
+      for (const ec of edgeCases) {
+        const normalized = normalizePaginatedResult(ec);
+        if (!Array.isArray(normalized.items)) {
+          throw new Error(`Failed to ensure items array for input: ${JSON.stringify(ec)}`);
+        }
+        if (typeof normalized.total !== 'number') {
+          throw new Error(`Failed to ensure total number for input: ${JSON.stringify(ec)}`);
+        }
+        // Crucial check: accessing .items or mapping must NEVER throw
+        const count = normalized.items.length;
+        const mapped = normalized.items.map((x: any) => x?.id);
+        if (typeof count !== 'number' || !Array.isArray(mapped)) {
+          throw new Error('Defensive access failed');
+        }
+      }
+    });
+
+    // 14. Clean up created operator
     if (createdOperatorId) {
       await prisma.user.delete({ where: { id: createdOperatorId } }).catch(() => {});
     }
