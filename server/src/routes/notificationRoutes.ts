@@ -75,7 +75,7 @@ notificationRouter.get(
   authenticateToken,
   requirePermission('VIEW_NOTIFICATIONS'),
   async (req: Request, res: Response) => {
-    const restaurantId = (req.query.restaurantId as string) || (req.headers['x-restaurant-id'] as string);
+    const restaurantId = (req.query.restaurantId as string) || (req.headers['x-restaurant-id'] as string) || req.userRestaurantId;
     if (!restaurantId) {
       res.status(400).json({ success: false, error: 'Restaurant context required' });
       return;
@@ -104,7 +104,7 @@ notificationRouter.get(
   authenticateToken,
   requirePermission('VIEW_NOTIFICATIONS'),
   async (req: Request, res: Response) => {
-    const restaurantId = (req.query.restaurantId as string) || (req.headers['x-restaurant-id'] as string);
+    const restaurantId = (req.query.restaurantId as string) || (req.headers['x-restaurant-id'] as string) || req.userRestaurantId;
     if (!restaurantId) {
       res.status(400).json({ success: false, error: 'Restaurant context required' });
       return;
@@ -221,7 +221,7 @@ notificationRouter.post(
   requirePermission('MARK_NOTIFICATIONS_READ'),
   async (req: Request, res: Response) => {
     try {
-      const restaurantId = (req.body?.restaurantId as string) || (req.headers['x-restaurant-id'] as string);
+      const restaurantId = (req.body?.restaurantId as string) || (req.headers['x-restaurant-id'] as string) || req.userRestaurantId;
       if (!restaurantId) {
         res.status(400).json({ success: false, error: 'Restaurant context required' });
         return;

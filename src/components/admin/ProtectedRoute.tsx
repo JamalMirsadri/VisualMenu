@@ -31,14 +31,21 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
   // Subscription Gating (Platform operators always bypass)
   if (!isPlatformAdmin && !isPlatformUser && !allowExpired) {
-    if (subscriptionStatus === 'EXPIRED' || subscriptionStatus === 'SUSPENDED' || subscriptionStatus === 'CANCELLED') {
-      if (location.pathname !== '/admin/subscription-required' && location.pathname !== '/admin/subscription') {
-        return <Navigate to="/admin/subscription-required" replace />;
-      }
-    } else if (subscriptionStatus === 'PENDING') {
-      if (location.pathname !== '/admin/subscription') {
-        return <Navigate to="/admin/subscription" replace />;
-      }
+    const isInactiveSub =
+      subscriptionStatus === 'EXPIRED' ||
+      subscriptionStatus === 'SUSPENDED' ||
+      subscriptionStatus === 'CANCELLED' ||
+      !subscriptionStatus;
+
+    const isAllowedWithoutSub =
+      location.pathname === '/admin/subscription-required' ||
+      location.pathname === '/admin/subscription' ||
+      location.pathname === '/admin/notifications';
+
+    if (isInactiveSub && !isAllowedWithoutSub) {
+      return <Navigate to="/admin/subscription-required" replace />;
+    } else if (subscriptionStatus === 'PENDING' && !isAllowedWithoutSub) {
+      return <Navigate to="/admin/subscription" replace />;
     }
   }
 

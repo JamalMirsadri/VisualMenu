@@ -224,7 +224,7 @@ export const SubscriptionRequiredPage: React.FC = () => {
 
       {/* Footer */}
       <div className="max-w-4xl mx-auto w-full text-center text-[11px] text-zinc-600 z-10">
-        &copy; {new Date().getFullYear()} AURA SaaS Platform. All rights reserved. Public customer menu access remains active.
+        &copy; {new Date().getFullYear()} AURA SaaS Platform. All rights reserved.
       </div>
     </div>
   );

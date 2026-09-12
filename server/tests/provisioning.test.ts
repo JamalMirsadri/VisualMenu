@@ -135,8 +135,8 @@ async function runProvisioningTests() {
       }
       if (!res.body.data?.restaurant?.id) throw new Error('Missing restaurant in response');
       if (!res.body.data?.invitation?.rawToken) throw new Error('Missing raw invitation token');
-      if (res.body.data.restaurant.provisioningStatus !== 'ACTIVE') {
-        throw new Error(`Expected ACTIVE status, got ${res.body.data.restaurant.provisioningStatus}`);
+      if (res.body.data.restaurant.provisioningStatus !== 'ACTIVE' && res.body.data.restaurant.provisioningStatus !== 'SUBSCRIPTION_PENDING') {
+        throw new Error(`Expected ACTIVE or SUBSCRIPTION_PENDING status, got ${res.body.data.restaurant.provisioningStatus}`);
       }
 
       provisionedRestaurant1 = res.body.data.restaurant;

@@ -920,6 +920,206 @@ platformRouter.post(
 );
 
 /**
+ * POST /api/platform/restaurants/:id/subscription/assign
+ * Platform Admin manually assigns a subscription (MANUAL or COMPLIMENTARY)
+ */
+platformRouter.post(
+  '/restaurants/:id/subscription/assign',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { planId, assignmentType = 'MANUAL', periodEnd, reason, startsAt, agreedPrice, currency } = req.body;
+
+      if (!planId || !periodEnd || !reason) {
+        res.status(400).json({
+          success: false,
+          errorCode: 'VALIDATION_ERROR',
+          message: 'planId, periodEnd, and reason are required.',
+        });
+        return;
+      }
+
+      const subscription = await SubscriptionService.manuallyAssignSubscription({
+        restaurantId: req.params.id,
+        planId,
+        assignmentType,
+        periodEnd: new Date(periodEnd),
+        reason,
+        assignedByUserId: req.user!.id,
+        startsAt: startsAt ? new Date(startsAt) : undefined,
+        agreedPrice: agreedPrice !== undefined ? Number(agreedPrice) : undefined,
+        currency,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: `Subscription successfully assigned (${assignmentType}).`,
+        data: subscription,
+      });
+    } catch (err: any) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        errorCode: err.errorCode || 'ASSIGN_FAILED',
+        message: err.message,
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/platform/restaurants/:id/subscription/revoke
+ * Platform Admin revokes subscription access immediately
+ */
+platformRouter.post(
+  '/restaurants/:id/subscription/revoke',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { reason } = req.body;
+      if (!reason || !reason.trim()) {
+        res.status(400).json({
+          success: false,
+          errorCode: 'REASON_REQUIRED',
+          message: 'An explicit reason is required to revoke a subscription.',
+        });
+        return;
+      }
+
+      const sub = await prisma.subscription.findFirst({
+        where: { restaurantId: req.params.id },
+      });
+
+      if (!sub) {
+        res.status(404).json({ success: false, error: 'Subscription not found' });
+        return;
+      }
+
+      const updated = await SubscriptionService.revokeSubscription(sub.id, req.user!.id, reason);
+      res.json({
+        success: true,
+        message: 'Subscription successfully revoked.',
+        data: updated,
+      });
+    } catch (err: any) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        errorCode: err.errorCode || 'REVOKE_FAILED',
+        message: err.message,
+      });
+    }
+  }
+);
+
+/**
+ * POST /api/platform/restaurants/:id/subscription/cancel-auto-renew
+ * Platform Admin cancels auto-renewal
+ */
+platformRouter.post(
+  '/restaurants/:id/subscription/cancel-auto-renew',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sub = await prisma.subscription.findFirst({
+        where: { restaurantId: req.params.id },
+      });
+
+      if (!sub) {
+        res.status(404).json({ success: false, error: 'Subscription not found' });
+        return;
+      }
+
+      const updated = await SubscriptionService.cancelAutoRenew(sub.id, req.user!.id, req.body.reason);
+      res.json({
+        success: true,
+        message: 'Auto-renewal cancelled. Subscription remains active until period end.',
+        data: updated,
+      });
+    } catch (err: any) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        errorCode: err.errorCode || 'CANCEL_FAILED',
+        message: err.message,
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/platform/subscription-requests
+ * Platform Admin lists all subscription requests across restaurants
+ */
+platformRouter.get(
+  '/subscription-requests',
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { restaurantId, status } = req.query;
+      const requests = await SubscriptionService.getSubscriptionRequests({
+        restaurantId: restaurantId ? String(restaurantId) : undefined,
+        status: status ? (String(status) as any) : undefined,
+      });
+      res.json({ success: true, data: requests });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/platform/subscription-requests/:id/review
+ * Platform Admin reviews request (APPROVE or REJECT)
+ */
+platformRouter.post(
+  '/subscription-requests/:id/review',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { action, rejectionReason } = req.body;
+      if (!action || (action !== 'APPROVE' && action !== 'REJECT')) {
+        res.status(400).json({
+          success: false,
+          errorCode: 'INVALID_ACTION',
+          message: "action must be 'APPROVE' or 'REJECT'.",
+        });
+        return;
+      }
+
+      if (action === 'REJECT' && (!rejectionReason || !rejectionReason.trim())) {
+        res.status(400).json({
+          success: false,
+          errorCode: 'REJECTION_REASON_REQUIRED',
+          message: 'rejectionReason is mandatory when rejecting a subscription request.',
+        });
+        return;
+      }
+
+      const request = await SubscriptionService.reviewSubscriptionRequest({
+        requestId: req.params.id,
+        reviewerUserId: req.user!.id,
+        action,
+        rejectionReason,
+      });
+
+      res.json({
+        success: true,
+        message: `Subscription request ${action.toLowerCase()}d successfully.`,
+        data: request,
+      });
+    } catch (err: any) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        errorCode: err.errorCode || 'REVIEW_FAILED',
+        message: err.message,
+      });
+    }
+  }
+);
+
+/**
  * GET /api/platform/subscriptions/plans
  * List all subscription plans for platform administration
  */

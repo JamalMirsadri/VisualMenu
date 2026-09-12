@@ -72,15 +72,25 @@ const MenuPageContent: React.FC = () => {
   }
 
   if (error || !restaurant) {
+    const isServiceUnavailable =
+      Boolean(error && (error.includes('temporarily unavailable') || error.includes('RESTAURANT_SERVICE_UNAVAILABLE') || error.includes('503')));
+
     return (
       <div className="flex flex-col items-center justify-center min-h-[100svh] w-full bg-zinc-950 text-zinc-300 p-6 text-center">
-        <h2 className="font-serif-luxury text-2xl text-amber-400 font-bold mb-2">Menu Unavailable</h2>
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-4 text-amber-400">
+          <ShoppingBag className="w-8 h-8 opacity-60" />
+        </div>
+        <h2 className="font-serif-luxury text-2xl text-amber-400 font-bold mb-2">
+          {isServiceUnavailable ? 'Menu Temporarily Unavailable' : 'Menu Unavailable'}
+        </h2>
         <p className="text-sm text-zinc-400 max-w-md mb-6">
-          {error || 'Unable to locate this restaurant menu on the live network.'}
+          {isServiceUnavailable
+            ? "This restaurant's menu is temporarily unavailable. Please contact the restaurant."
+            : error || 'Unable to locate this restaurant menu on the live network.'}
         </p>
         <button
           onClick={() => reload()}
-          className="px-6 py-2.5 rounded-full bg-amber-500 text-black font-semibold text-xs tracking-wider uppercase hover:bg-amber-400 transition-colors"
+          className="px-6 py-2.5 rounded-full bg-amber-500 text-black font-semibold text-xs tracking-wider uppercase hover:bg-amber-400 transition-colors cursor-pointer"
         >
           Retry
         </button>

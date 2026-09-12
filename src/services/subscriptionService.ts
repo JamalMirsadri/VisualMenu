@@ -40,6 +40,8 @@ export interface SubscriptionDetails {
   provider: string;
   agreedPrice: string | number;
   agreedCurrency: string;
+  assignmentType?: 'PAID' | 'MANUAL' | 'COMPLIMENTARY';
+  assignmentReason?: string | null;
   daysRemaining: number;
   isExpired: boolean;
   isGracePeriod: boolean;
@@ -91,6 +93,24 @@ export interface SubscriptionEvent {
   } | null;
 }
 
+export interface SubscriptionRequest {
+  id: string;
+  restaurantId: string;
+  requestedPlanId: string;
+  requestedByUserId: string;
+  status: 'PENDING' | 'PAYMENT_REQUIRED' | 'PAID' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  notes?: string;
+  billingInterval?: BillingInterval;
+  reviewedByUserId?: string;
+  subscriptionId?: string;
+  requestedAt: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
+  requestedPlan: SubscriptionPlan;
+  requestedByUser?: { id: string; name: string; email: string };
+  reviewedByUser?: { id: string; name: string; email: string };
+}
+
 class SubscriptionService {
   async getPlans(): Promise<SubscriptionPlan[]> {
     return apiClient.get<SubscriptionPlan[]>('/subscriptions/plans');
@@ -131,6 +151,19 @@ class SubscriptionService {
   async resumeAutoRenew(restaurantId: string): Promise<SubscriptionDetails> {
     return apiClient.post<SubscriptionDetails>(`/subscriptions/restaurant/${restaurantId}/resume`, {});
   }
+
+  async requestSubscription(restaurantId: string, planId: string, notes?: string): Promise<SubscriptionRequest> {
+    return apiClient.post<SubscriptionRequest>(`/subscriptions/restaurant/${restaurantId}/request`, { planId, notes });
+  }
+
+  async getRequests(restaurantId: string): Promise<SubscriptionRequest[]> {
+    return apiClient.get<SubscriptionRequest[]>(`/subscriptions/restaurant/${restaurantId}/requests`);
+  }
+
+  async activateWithPayment(restaurantId: string, payload: { planId: string; amount: number; currency?: string; requestId?: string }): Promise<SubscriptionDetails> {
+    return apiClient.post<SubscriptionDetails>(`/subscriptions/restaurant/${restaurantId}/activate`, payload);
+  }
 }
 
 export const subscriptionService = new SubscriptionService();
+

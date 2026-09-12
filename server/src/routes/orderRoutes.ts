@@ -9,6 +9,7 @@ import { orderCreationRateLimiter, orderTrackingRateLimiter } from '../middlewar
 import { NifValidator } from '../services/fiscal/nifValidator';
 import { CashPaymentService } from '../services/payment/cashPaymentService';
 import { hasPermission } from '../constants/permissions';
+import { requireActiveSubscription, requireRestaurantServiceActive } from '../middleware/subscriptionMiddleware';
 
 export const orderRouter = Router();
 
@@ -121,6 +122,7 @@ orderRouter.get(
 orderRouter.post(
   '/orders',
   orderCreationRateLimiter,
+  requireRestaurantServiceActive(),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idempotencyKey = (req.headers['idempotency-key'] as string | undefined)?.trim();
@@ -568,6 +570,8 @@ orderRouter.post(
 // =============================================================================
 // PROTECTED ADMIN & KITCHEN ORDER OPERATIONS
 // =============================================================================
+
+orderRouter.use('/restaurants/:restaurantId', authenticateToken, requireActiveSubscription());
 
 /**
  * GET /api/restaurants/:restaurantId/orders

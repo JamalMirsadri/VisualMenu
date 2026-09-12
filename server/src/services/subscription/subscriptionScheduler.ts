@@ -129,6 +129,15 @@ export class SubscriptionScheduler {
         if (diffDays <= rule.daysBefore && diffDays > (rule.daysBefore === 1 ? 0 : rule.daysBefore - 1)) {
           // Attempt to record in SubscriptionReminderLog (atomic deduplication via unique constraint)
           try {
+            const alreadySent = await prisma.subscriptionReminderLog.findFirst({
+              where: {
+                subscriptionId: sub.id,
+                eventType: rule.eventType,
+                periodEnd: sub.currentPeriodEnd,
+              },
+            });
+            if (alreadySent) continue;
+
             await prisma.subscriptionReminderLog.create({
               data: {
                 subscriptionId: sub.id,

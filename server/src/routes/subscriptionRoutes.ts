@@ -50,10 +50,10 @@ subscriptionRouter.get(
       const status = await SubscriptionService.getSubscriptionStatus(restaurantId);
 
       if (!status) {
-        res.status(404).json({
-          success: false,
-          errorCode: 'SUBSCRIPTION_NOT_FOUND',
-          message: 'No subscription found for this restaurant.',
+        res.json({
+          success: true,
+          data: null,
+          subscriptionStatus: 'NONE',
         });
         return;
       }
@@ -286,3 +286,115 @@ subscriptionRouter.post(
     }
   }
 );
+
+/**
+ * Protected: Owner submits explicit subscription request
+ */
+subscriptionRouter.post(
+  '/restaurant/:restaurantId/request',
+  authenticateToken,
+  requireRestaurantAccess([Role.OWNER, Role.ADMIN]),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = req.params.restaurantId;
+      const { planId, notes, billingInterval } = req.body;
+
+      if (!planId) {
+        res.status(400).json({
+          success: false,
+          errorCode: 'VALIDATION_ERROR',
+          message: 'planId is required to submit a subscription request.',
+        });
+        return;
+      }
+
+      const request = await SubscriptionService.createSubscriptionRequest({
+        restaurantId,
+        requestedPlanId: planId,
+        requestedByUserId: req.user!.id,
+        notes,
+        billingInterval,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Subscription request submitted successfully.',
+        data: request,
+      });
+    } catch (err: any) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        errorCode: err.errorCode || 'REQUEST_FAILED',
+        message: err.message,
+      });
+    }
+  }
+);
+
+/**
+ * Protected: Get subscription requests for restaurant
+ */
+subscriptionRouter.get(
+  '/restaurant/:restaurantId/requests',
+  authenticateToken,
+  requireRestaurantAccess([Role.OWNER, Role.ADMIN]),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = req.params.restaurantId;
+      const requests = await SubscriptionService.getSubscriptionRequests({ restaurantId });
+      res.json({ success: true, data: requests });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
+ * Protected: Activate subscription upon confirmed payment (Mock / Direct Provider)
+ */
+subscriptionRouter.post(
+  '/restaurant/:restaurantId/activate',
+  authenticateToken,
+  requireRestaurantAccess([Role.OWNER, Role.ADMIN]),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = req.params.restaurantId;
+      const { planId, amount, currency = 'EUR', provider = 'MOCK', providerTransactionId, requestId } = req.body;
+
+      if (!planId || amount === undefined) {
+        res.status(400).json({
+          success: false,
+          errorCode: 'VALIDATION_ERROR',
+          message: 'planId and amount are required.',
+        });
+        return;
+      }
+
+      const txId = providerTransactionId || `mock_tx_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+      const subscription = await SubscriptionService.activateFromPayment({
+        restaurantId,
+        planId,
+        amount: Number(amount),
+        currency,
+        provider,
+        providerTransactionId: txId,
+        requestId,
+        actorUserId: req.user?.id,
+      });
+
+      res.json({
+        success: true,
+        message: 'Subscription activated successfully.',
+        data: subscription,
+      });
+    } catch (err: any) {
+      res.status(err.statusCode || 500).json({
+        success: false,
+        errorCode: err.errorCode || 'ACTIVATION_FAILED',
+        message: err.message,
+      });
+    }
+  }
+);
+

@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../prisma';
+import { requireRestaurantServiceActive } from '../middleware/subscriptionMiddleware';
 
 export const publicMenuRouter = Router();
 
@@ -215,6 +216,7 @@ async function getRestaurantMenuData(restaurantSlug: string) {
  */
 publicMenuRouter.get(
   '/:restaurantSlug',
+  requireRestaurantServiceActive(),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { restaurantSlug } = req.params;
@@ -245,6 +247,7 @@ publicMenuRouter.get(
  */
 publicMenuRouter.get(
   '/:restaurantSlug/table/:tableNumber',
+  requireRestaurantServiceActive(),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { restaurantSlug, tableNumber } = req.params;

@@ -277,6 +277,43 @@ export const platformService = {
     const res = await apiClient.get<any>(`/platform/subscriptions/plans`);
     return unwrapResponse<any[]>(res);
   },
+
+  async assignRestaurantSubscription(restaurantId: string, data: {
+    planId: string;
+    assignmentType: 'MANUAL' | 'COMPLIMENTARY';
+    periodEnd: string;
+    reason: string;
+    startsAt?: string;
+    agreedPrice?: number;
+    currency?: string;
+  }): Promise<any> {
+    const res = await apiClient.post<any>(`/platform/restaurants/${restaurantId}/subscription/assign`, data);
+    return unwrapResponse<any>(res);
+  },
+
+  async revokeRestaurantSubscription(restaurantId: string, reason: string): Promise<any> {
+    const res = await apiClient.post<any>(`/platform/restaurants/${restaurantId}/subscription/revoke`, { reason });
+    return unwrapResponse<any>(res);
+  },
+
+  async cancelAutoRenewRestaurantSubscription(restaurantId: string, reason?: string): Promise<any> {
+    const res = await apiClient.post<any>(`/platform/restaurants/${restaurantId}/subscription/cancel-auto-renew`, { reason });
+    return unwrapResponse<any>(res);
+  },
+
+  async getSubscriptionRequests(params?: { restaurantId?: string; status?: string }): Promise<any[]> {
+    const searchParams = new URLSearchParams();
+    if (params?.restaurantId) searchParams.set('restaurantId', params.restaurantId);
+    if (params?.status) searchParams.set('status', params.status);
+    const qs = searchParams.toString();
+    const res = await apiClient.get<any>(`/platform/subscription-requests${qs ? `?${qs}` : ''}`);
+    return unwrapResponse<any[]>(res);
+  },
+
+  async reviewSubscriptionRequest(requestId: string, action: 'APPROVE' | 'REJECT', rejectionReason?: string): Promise<any> {
+    const res = await apiClient.post<any>(`/platform/subscription-requests/${requestId}/review`, { action, rejectionReason });
+    return unwrapResponse<any>(res);
+  },
 };
 
 export const ownerInvitationService = {

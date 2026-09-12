@@ -1097,7 +1097,7 @@ async function runSubscriptionTestSuite() {
     // =============================================================
     // GROUP 12: REGRESSION & EDGE CASES (Tests 65–72)
     // =============================================================
-    await assert('65. Public menu unaffected: Customer menu remains accessible when subscription is EXPIRED', async () => {
+    await assert('65. Customer menu blocked with 503 when subscription is EXPIRED (Phase 13C)', async () => {
       // Expire restaurant A subscription
       await prisma.subscription.update({
         where: { id: subscriptionA.id },
@@ -1105,8 +1105,8 @@ async function runSubscriptionTestSuite() {
       });
 
       const res = await request(app).get(`/api/menu/${restaurantA.slug}`);
-      if (res.status !== 200) {
-        throw new Error(`Public menu should return 200, got ${res.status}`);
+      if (res.status !== 503) {
+        throw new Error(`Public menu should return 503 when EXPIRED, got ${res.status}`);
       }
     });
 

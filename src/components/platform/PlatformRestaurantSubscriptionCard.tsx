@@ -8,6 +8,9 @@ import {
   RotateCcw,
   Play,
   Pause,
+  XCircle,
+  Gift,
+  Ban,
 } from 'lucide-react';
 import { platformService } from '../../services/platformService';
 
@@ -38,8 +41,19 @@ export const PlatformRestaurantSubscriptionCard: React.FC<SubscriptionCardProps>
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [changePlanReason, setChangePlanReason] = useState('');
 
+  // Phase 13C: Manual Assign & Revoke states
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignPlanId, setAssignPlanId] = useState('');
+  const [assignType, setAssignType] = useState<'MANUAL' | 'COMPLIMENTARY'>('MANUAL');
+  const [assignPrice, setAssignPrice] = useState('29.00');
+  const [assignDurationMonths, setAssignDurationMonths] = useState(1);
+  const [assignReason, setAssignReason] = useState('');
+
+  const [showRevokeModal, setShowRevokeModal] = useState(false);
+  const [revokeReason, setRevokeReason] = useState('');
+
   // Tab views
-  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'payments'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'payments' | 'requests'>('details');
 
   const loadSubscription = async () => {
     try {
@@ -159,6 +173,94 @@ export const PlatformRestaurantSubscriptionCard: React.FC<SubscriptionCardProps>
     }
   };
 
+  const handleAssign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!assignPlanId) {
+      alert('Please select a plan to assign.');
+      return;
+    }
+    if (!assignReason.trim()) {
+      alert('A reason is mandatory for manual or complimentary subscription assignment.');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      const endDate = new Date();
+      endDate.setMonth(endDate.getMonth() + assignDurationMonths);
+      await platformService.assignRestaurantSubscription(restaurantId, {
+        planId: assignPlanId,
+        assignmentType: assignType,
+        agreedPrice: assignType === 'COMPLIMENTARY' ? 0 : parseFloat(assignPrice || '0'),
+        periodEnd: endDate.toISOString(),
+        reason: assignReason.trim(),
+      });
+      setShowAssignModal(false);
+      setAssignReason('');
+      await loadSubscription();
+    } catch (err: any) {
+      alert(`Assignment failed: ${err.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRevoke = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!revokeReason.trim()) {
+      alert('A mandatory reason is required to revoke subscription access.');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      await platformService.revokeRestaurantSubscription(restaurantId, revokeReason.trim());
+      setShowRevokeModal(false);
+      setRevokeReason('');
+      await loadSubscription();
+    } catch (err: any) {
+      alert(`Revocation failed: ${err.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCancelAutoRenew = async () => {
+    const reason = window.prompt('Enter reason for cancelling auto-renew (subscription remains active until period end):');
+    if (!reason || !reason.trim()) return;
+    try {
+      setActionLoading(true);
+      await platformService.cancelAutoRenewRestaurantSubscription(restaurantId, reason.trim());
+      await loadSubscription();
+    } catch (err: any) {
+      alert(`Cancel auto-renew failed: ${err.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReviewRequest = async (requestId: string, approved: boolean) => {
+    let reviewNotes = '';
+    if (!approved) {
+      const promptNotes = window.prompt('Enter rejection reason (mandatory):');
+      if (!promptNotes || !promptNotes.trim()) return;
+      reviewNotes = promptNotes.trim();
+    } else {
+      reviewNotes = 'Approved by Platform Admin. Payment required for activation.';
+    }
+    try {
+      setActionLoading(true);
+      await platformService.reviewSubscriptionRequest(
+        requestId,
+        approved ? 'APPROVE' : 'REJECT',
+        reviewNotes
+      );
+      await loadSubscription();
+    } catch (err: any) {
+      alert(`Review request failed: ${err.message}`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6 rounded-3xl bg-zinc-900/80 border border-zinc-800 shadow-lg flex items-center justify-center min-h-[200px]">
@@ -169,21 +271,146 @@ export const PlatformRestaurantSubscriptionCard: React.FC<SubscriptionCardProps>
 
   if (error || !subscription) {
     return (
-      <div className="p-6 rounded-3xl bg-zinc-900/80 border border-zinc-800 shadow-lg space-y-3">
+      <div className="p-6 rounded-3xl bg-zinc-900/80 border border-zinc-800 shadow-lg space-y-4">
         <div className="flex items-center gap-2 text-amber-400">
           <AlertCircle className="w-5 h-5" />
           <h2 className="text-base font-bold text-white">SaaS Subscription & Billing Isolation</h2>
         </div>
         <p className="text-xs text-zinc-400">
-          {error || 'No active subscription or pending subscription record found.'}
+          {error || 'No active subscription found. Newly provisioned restaurants require an explicit subscription request or manual assignment.'}
         </p>
-        <button
-          onClick={loadSubscription}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs text-white"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Retry</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              if (availablePlans.length > 0 && !assignPlanId) setAssignPlanId(availablePlans[0].id);
+              setShowAssignModal(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-zinc-950 shadow-md shadow-amber-500/20"
+          >
+            <Gift className="w-3.5 h-3.5" />
+            <span>Assign Subscription Plan</span>
+          </button>
+          <button
+            onClick={loadSubscription}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs text-white"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry</span>
+          </button>
+        </div>
+
+        {/* Modal: Assign Subscription (When empty) */}
+        {showAssignModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 text-left">
+            <div className="w-full max-w-md p-6 rounded-3xl bg-zinc-900 border border-zinc-800 shadow-2xl space-y-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Gift className="w-4 h-4 text-amber-400" />
+                <span>Assign Restaurant Subscription</span>
+              </h3>
+              <form onSubmit={handleAssign} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Select Plan</label>
+                  <select
+                    required
+                    value={assignPlanId}
+                    onChange={(e) => {
+                      setAssignPlanId(e.target.value);
+                      const p = availablePlans.find((pl) => pl.id === e.target.value);
+                      if (p && assignType === 'MANUAL') setAssignPrice(String(p.price));
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs focus:border-amber-400 focus:outline-none"
+                  >
+                    <option value="">-- Select a Plan --</option>
+                    {availablePlans.filter((p) => p.active).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.billingInterval}) — €{p.price}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">Assignment Type</label>
+                    <select
+                      value={assignType}
+                      onChange={(e: any) => {
+                        setAssignType(e.target.value);
+                        if (e.target.value === 'COMPLIMENTARY') setAssignPrice('0.00');
+                        else {
+                          const p = availablePlans.find((pl) => pl.id === assignPlanId);
+                          setAssignPrice(p ? String(p.price) : '29.00');
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs focus:border-amber-400 focus:outline-none"
+                    >
+                      <option value="MANUAL">MANUAL (Agreed Price)</option>
+                      <option value="COMPLIMENTARY">COMPLIMENTARY (€0)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">Duration (Months)</label>
+                    <select
+                      value={assignDurationMonths}
+                      onChange={(e) => setAssignDurationMonths(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs focus:border-amber-400 focus:outline-none"
+                    >
+                      <option value={1}>1 Month</option>
+                      <option value={3}>3 Months</option>
+                      <option value={6}>6 Months</option>
+                      <option value={12}>12 Months (1 Year)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {assignType === 'MANUAL' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">Agreed Monthly Price (€)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={assignPrice}
+                      onChange={(e) => setAssignPrice(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs focus:border-amber-400 focus:outline-none"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Mandatory Assignment Reason
+                  </label>
+                  <textarea
+                    required
+                    rows={2}
+                    placeholder="e.g. Contractual agreement #102, sales partnership promo, VIP pilot"
+                    value={assignReason}
+                    onChange={(e) => setAssignReason(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs focus:border-amber-400 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAssignModal(false)}
+                    className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={actionLoading}
+                    className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-zinc-950 shadow-md"
+                  >
+                    {actionLoading ? 'Assigning...' : 'Confirm Assignment'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -236,6 +463,18 @@ export const PlatformRestaurantSubscriptionCard: React.FC<SubscriptionCardProps>
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              if (availablePlans.length > 0 && !assignPlanId) setAssignPlanId(availablePlans[0].id);
+              setShowAssignModal(true);
+            }}
+            disabled={actionLoading}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shadow-md transition-all cursor-pointer"
+          >
+            <Gift className="w-3.5 h-3.5" />
+            <span>Assign Plan</span>
+          </button>
+
           {subscription.status === 'PENDING' && (
             <button
               onClick={handleActivate}
@@ -259,20 +498,42 @@ export const PlatformRestaurantSubscriptionCard: React.FC<SubscriptionCardProps>
           )}
 
           {(subscription.status === 'ACTIVE' || subscription.status === 'GRACE_PERIOD') && (
+            <>
+              <button
+                onClick={() => setShowRevokeModal(true)}
+                disabled={actionLoading}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-800 text-red-300 text-xs font-semibold transition-all cursor-pointer"
+              >
+                <Ban className="w-3.5 h-3.5" />
+                <span>Revoke Access</span>
+              </button>
+
+              <button
+                onClick={() => setShowSuspendModal(true)}
+                disabled={actionLoading}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-xs font-semibold transition-all cursor-pointer"
+              >
+                <Pause className="w-3.5 h-3.5" />
+                <span>Suspend</span>
+              </button>
+            </>
+          )}
+
+          {subscription.autoRenew && (
             <button
-              onClick={() => setShowSuspendModal(true)}
+              onClick={handleCancelAutoRenew}
               disabled={actionLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-red-950/50 hover:text-red-300 border border-zinc-700 text-zinc-300 text-xs font-semibold transition-all cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-xs font-semibold transition-all cursor-pointer"
             >
-              <Pause className="w-3.5 h-3.5" />
-              <span>Suspend</span>
+              <XCircle className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Cancel Auto-Renew</span>
             </button>
           )}
 
           <button
             onClick={() => setShowExtendModal(true)}
             disabled={actionLoading}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white text-xs font-semibold transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white text-xs font-semibold transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5 text-amber-400" />
             <span>Extend (+Days)</span>
@@ -281,7 +542,7 @@ export const PlatformRestaurantSubscriptionCard: React.FC<SubscriptionCardProps>
           <button
             onClick={() => setShowChangePlanModal(true)}
             disabled={actionLoading}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white text-xs font-semibold transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white text-xs font-semibold transition-all cursor-pointer"
           >
             <span>Change Plan</span>
           </button>
@@ -291,12 +552,30 @@ export const PlatformRestaurantSubscriptionCard: React.FC<SubscriptionCardProps>
       {/* Core Subscription Details Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
         <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 space-y-1">
-          <span className="text-zinc-500 uppercase tracking-wider text-[10px]">Subscription Plan</span>
+          <div className="flex items-center justify-between">
+            <span className="text-zinc-500 uppercase tracking-wider text-[10px]">Subscription Plan</span>
+            <span
+              className={`text-[9px] font-mono px-2 py-0.5 rounded-full font-semibold border ${
+                subscription.assignmentType === 'COMPLIMENTARY'
+                  ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                  : subscription.assignmentType === 'MANUAL'
+                  ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                  : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+              }`}
+            >
+              {subscription.assignmentType || 'PAID'}
+            </span>
+          </div>
           <div className="font-bold text-white text-sm">{subscription.plan?.name || 'Custom Plan'}</div>
           <div className="text-amber-400 font-mono text-xs font-semibold">
             {formatCurrency(subscription.agreedPrice || subscription.plan?.price, subscription.agreedCurrency || 'EUR')}{' '}
             <span className="text-zinc-500 text-[10px]">/{subscription.plan?.billingInterval?.toLowerCase()}</span>
           </div>
+          {subscription.assignmentReason && (
+            <div className="text-[10px] text-zinc-400 font-mono italic truncate mt-1" title={subscription.assignmentReason}>
+              Note: {subscription.assignmentReason}
+            </div>
+          )}
         </div>
 
         <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 space-y-1">
@@ -381,6 +660,16 @@ export const PlatformRestaurantSubscriptionCard: React.FC<SubscriptionCardProps>
             }`}
           >
             Audit Events Timeline ({subscription.events?.length || 0})
+          </button>
+          <button
+            onClick={() => setActiveTab('requests')}
+            className={`px-4 py-2 border-b-2 cursor-pointer transition-colors ${
+              activeTab === 'requests'
+                ? 'border-amber-400 text-amber-400'
+                : 'border-transparent text-zinc-400 hover:text-white'
+            }`}
+          >
+            Subscription Requests ({subscription.requests?.length || 0})
           </button>
         </div>
 
@@ -518,6 +807,98 @@ export const PlatformRestaurantSubscriptionCard: React.FC<SubscriptionCardProps>
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'requests' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                Tenant Subscription Requests ({subscription.requests?.length || 0})
+              </h4>
+            </div>
+
+            {(!subscription.requests || subscription.requests.length === 0) ? (
+              <p className="text-xs text-zinc-500 py-6 text-center">No subscription requests filed by this restaurant yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-zinc-950/60 border-b border-zinc-800 text-zinc-400 uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="px-3 py-2">Requested Date</th>
+                      <th className="px-3 py-2">Plan</th>
+                      <th className="px-3 py-2">Requester</th>
+                      <th className="px-3 py-2">Status</th>
+                      <th className="px-3 py-2">Notes</th>
+                      <th className="px-3 py-2 text-right">Review Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/60">
+                    {subscription.requests.map((r: any) => (
+                      <tr key={r.id} className="hover:bg-zinc-800/30">
+                        <td className="px-3 py-2 text-zinc-400 font-mono text-[11px]">
+                          {new Date(r.requestedAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-3 py-2 font-semibold text-white">
+                          {r.requestedPlan?.name || 'Plan'}
+                          <span className="text-zinc-500 text-[10px] block font-normal">
+                            €{r.requestedPlan?.price} / {r.requestedPlan?.billingInterval?.toLowerCase()}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-zinc-300">
+                          {r.requester?.name || r.requester?.email || 'Owner'}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${
+                              r.status === 'PAID' || r.status === 'APPROVED'
+                                ? 'bg-emerald-500/15 text-emerald-300'
+                                : r.status === 'PAYMENT_REQUIRED'
+                                ? 'bg-sky-500/15 text-sky-300'
+                                : r.status === 'REJECTED'
+                                ? 'bg-red-500/15 text-red-300'
+                                : 'bg-amber-500/15 text-amber-300'
+                            }`}
+                          >
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-zinc-400 text-[11px] max-w-xs">
+                          {r.notes && <div className="text-zinc-300">&quot;{r.notes}&quot;</div>}
+                          {r.reviewNotes && (
+                            <div className="text-amber-400 text-[10px] font-mono mt-0.5">
+                              Review: {r.reviewNotes}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {r.status === 'PENDING' ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleReviewRequest(r.id, true)}
+                                disabled={actionLoading}
+                                className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition-all"
+                              >
+                                Approve Payment
+                              </button>
+                              <button
+                                onClick={() => handleReviewRequest(r.id, false)}
+                                disabled={actionLoading}
+                                className="px-2.5 py-1 rounded bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-300 font-semibold text-[11px] transition-all"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-zinc-500 text-xs">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -693,6 +1074,170 @@ export const PlatformRestaurantSubscriptionCard: React.FC<SubscriptionCardProps>
                   className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-semibold text-black cursor-pointer shadow-lg shadow-amber-500/20"
                 >
                   {actionLoading ? 'Updating...' : 'Apply Plan Change'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal: Revoke Access */}
+      {showRevokeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-zinc-900 border border-zinc-800 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-red-400 flex items-center gap-2">
+              <Ban className="w-4 h-4" />
+              <span>Revoke Subscription Access</span>
+            </h3>
+            <p className="text-xs text-zinc-400">
+              Immediately revokes subscription access for &quot;{restaurantName}&quot;. Administration and public menus will be blocked.
+            </p>
+
+            <form onSubmit={handleRevoke} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Mandatory Revocation Reason
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="e.g. Non-payment default, breach of terms, operational dispute"
+                  value={revokeReason}
+                  onChange={(e) => setRevokeReason(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs focus:border-red-400 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRevokeModal(false)}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-bold text-white shadow-lg shadow-red-600/20"
+                >
+                  {actionLoading ? 'Revoking...' : 'Confirm Immediate Revoke'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Assign Subscription */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 text-left">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-zinc-900 border border-zinc-800 shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Gift className="w-4 h-4 text-amber-400" />
+              <span>Assign / Replace Restaurant Subscription</span>
+            </h3>
+            <p className="text-xs text-zinc-400">
+              Manually assign or replace a plan for &quot;{restaurantName}&quot;. An audit record will be logged.
+            </p>
+
+            <form onSubmit={handleAssign} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Select Plan</label>
+                <select
+                  required
+                  value={assignPlanId}
+                  onChange={(e) => {
+                    setAssignPlanId(e.target.value);
+                    const p = availablePlans.find((pl) => pl.id === e.target.value);
+                    if (p && assignType === 'MANUAL') setAssignPrice(String(p.price));
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs focus:border-amber-400 focus:outline-none"
+                >
+                  <option value="">-- Select a Plan --</option>
+                  {availablePlans.filter((p) => p.active).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.billingInterval}) — €{p.price}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Assignment Type</label>
+                  <select
+                    value={assignType}
+                    onChange={(e: any) => {
+                      setAssignType(e.target.value);
+                      if (e.target.value === 'COMPLIMENTARY') setAssignPrice('0.00');
+                      else {
+                        const p = availablePlans.find((pl) => pl.id === assignPlanId);
+                        setAssignPrice(p ? String(p.price) : '29.00');
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs focus:border-amber-400 focus:outline-none"
+                  >
+                    <option value="MANUAL">MANUAL (Agreed Price)</option>
+                    <option value="COMPLIMENTARY">COMPLIMENTARY (€0)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Duration (Months)</label>
+                  <select
+                    value={assignDurationMonths}
+                    onChange={(e) => setAssignDurationMonths(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs focus:border-amber-400 focus:outline-none"
+                  >
+                    <option value={1}>1 Month</option>
+                    <option value={3}>3 Months</option>
+                    <option value={6}>6 Months</option>
+                    <option value={12}>12 Months (1 Year)</option>
+                  </select>
+                </div>
+              </div>
+
+              {assignType === 'MANUAL' && (
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Agreed Monthly Price (€)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={assignPrice}
+                    onChange={(e) => setAssignPrice(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs focus:border-amber-400 focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Mandatory Assignment Reason
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  placeholder="e.g. Sales partnership agreement, VIP courtesy access, offline payment"
+                  value={assignReason}
+                  onChange={(e) => setAssignReason(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAssignModal(false)}
+                  className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-zinc-950 shadow-md"
+                >
+                  {actionLoading ? 'Assigning...' : 'Confirm Assignment'}
                 </button>
               </div>
             </form>

@@ -50,9 +50,25 @@ enum PlatformRole {
 
 enum ProvisioningStatus {
   PROVISIONING
+  SUBSCRIPTION_PENDING
   ACTIVE
   SUSPENDED
   DEACTIVATED
+}
+
+enum SubscriptionRequestStatus {
+  PENDING
+  PAYMENT_REQUIRED
+  PAID
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum SubscriptionAssignmentType {
+  PAID
+  MANUAL
+  COMPLIMENTARY
 }
 
 enum SubscriptionStatus {
@@ -94,6 +110,9 @@ enum NotificationType {
   SYSTEM_ALERT
   SECURITY_ALERT
   GENERAL_ANNOUNCEMENT
+  SUBSCRIPTION_REQUESTED
+  SUBSCRIPTION_PAYMENT_REQUIRED
+  SUBSCRIPTION_PAYMENT_SUCCESS
 }
 
 enum NotificationSource {
@@ -186,6 +205,10 @@ enum AuditAction {
   PLATFORM_MESSAGE_EDITED
   NOTIFICATION_READ
   NOTIFICATION_ACKNOWLEDGED
+  SUBSCRIPTION_REQUESTED
+  SUBSCRIPTION_PAYMENT_REQUIRED
+  SUBSCRIPTION_MANUALLY_ASSIGNED
+  SUBSCRIPTION_REVOKED
 }
 
 enum PaymentMethod {
@@ -277,6 +300,7 @@ model Restaurant {
   ownerInvitations OwnerInvitation[]
   staffInvitations StaffInvitation[]
   subscriptions    Subscription[]
+  subscriptionRequests SubscriptionRequest[]
   notifications    Notification[]
   messageRecipients PlatformMessageRecipient[]
 
@@ -737,6 +761,9 @@ model User {
   editedMessageRevisions PlatformMessageRevision[] @relation("EditedMessageRevisions")
   createdStaffInvitations StaffInvitation[]   @relation("CreatedStaffInvitations")
   acknowledgedRecipients PlatformMessageRecipient[] @relation("RecipientAcknowledgedBy")
+  requestedSubscriptions SubscriptionRequest[] @relation("RequestedSubscriptions")
+  reviewedSubscriptionRequests SubscriptionRequest[] @relation("ReviewedSubscriptionRequests")
+  assignedSubscriptions  Subscription[]       @relation("AssignedSubscriptions")
 
   @@index([platformRole])
   @@map("users")
@@ -925,45 +952,52 @@ model SubscriptionPlan {
   createdAt        DateTime        @default(now()) @map("created_at")
   updatedAt        DateTime        @updatedAt @map("updated_at")
 
-  subscriptions    Subscription[]
+  subscriptions        Subscription[]
+  subscriptionRequests SubscriptionRequest[]
 
   @@index([active])
   @@map("subscription_plans")
 }
 
 model Subscription {
-  id                       String             @id @default(uuid()) @db.Uuid
-  restaurantId             String             @map("restaurant_id") @db.Uuid
-  planId                   String             @map("plan_id") @db.Uuid
-  status                   SubscriptionStatus @default(PENDING)
-  startsAt                 DateTime           @map("starts_at")
-  currentPeriodStart       DateTime           @map("current_period_start")
-  currentPeriodEnd         DateTime           @map("current_period_end")
-  trialEndsAt              DateTime?          @map("trial_ends_at")
-  graceEndsAt              DateTime?          @map("grace_ends_at")
-  cancelledAt              DateTime?          @map("cancelled_at")
-  endedAt                  DateTime?          @map("ended_at")
-  autoRenew                Boolean            @default(true) @map("auto_renew")
-  provider                 String             @default("MOCK")
-  providerCustomerId       String?            @map("provider_customer_id")
-  providerSubscriptionId   String?            @map("provider_subscription_id")
-  agreedPrice              Decimal            @db.Decimal(10, 2) @map("agreed_price")
-  agreedCurrency           String             @default("EUR") @map("agreed_currency")
-  createdAt                DateTime           @default(now()) @map("created_at")
-  updatedAt                DateTime           @updatedAt @map("updated_at")
+  id                       String                     @id @default(uuid()) @db.Uuid
+  restaurantId             String                     @map("restaurant_id") @db.Uuid
+  planId                   String                     @map("plan_id") @db.Uuid
+  status                   SubscriptionStatus         @default(PENDING)
+  startsAt                 DateTime                   @map("starts_at")
+  currentPeriodStart       DateTime                   @map("current_period_start")
+  currentPeriodEnd         DateTime                   @map("current_period_end")
+  trialEndsAt              DateTime?                  @map("trial_ends_at")
+  graceEndsAt              DateTime?                  @map("grace_ends_at")
+  cancelledAt              DateTime?                  @map("cancelled_at")
+  endedAt                  DateTime?                  @map("ended_at")
+  autoRenew                Boolean                    @default(true) @map("auto_renew")
+  provider                 String                     @default("MOCK")
+  providerCustomerId       String?                    @map("provider_customer_id")
+  providerSubscriptionId   String?                    @map("provider_subscription_id")
+  agreedPrice              Decimal                    @db.Decimal(10, 2) @map("agreed_price")
+  agreedCurrency           String                     @default("EUR") @map("agreed_currency")
+  assignmentType           SubscriptionAssignmentType @default(PAID) @map("assignment_type")
+  assignmentReason         String?                    @map("assignment_reason") @db.Text
+  assignedByUserId         String?                    @map("assigned_by_user_id") @db.Uuid
+  createdAt                DateTime                   @default(now()) @map("created_at")
+  updatedAt                DateTime                   @updatedAt @map("updated_at")
 
-  restaurant               Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  plan                     SubscriptionPlan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  restaurant               Restaurant                 @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  plan                     SubscriptionPlan           @relation(fields: [planId], references: [id], onDelete: Restrict)
+  assignedByUser           User?                      @relation("AssignedSubscriptions", fields: [assignedByUserId], references: [id], onDelete: SetNull)
   payments                 SubscriptionPayment[]
   invoices                 SubscriptionInvoice[]
   events                   SubscriptionEvent[]
   reminderLogs             SubscriptionReminderLog[]
+  requests                 SubscriptionRequest[]
 
   @@index([restaurantId])
   @@index([status])
   @@index([currentPeriodEnd])
   @@index([planId])
   @@index([providerSubscriptionId])
+  @@index([assignmentType])
   @@index([restaurantId, status])
   @@map("subscriptions")
 }
@@ -1161,4 +1195,33 @@ model SubscriptionReminderLog {
   @@unique([subscriptionId, eventType, periodEnd])
   @@index([subscriptionId])
   @@map("subscription_reminder_logs")
+}
+
+model SubscriptionRequest {
+  id                String                    @id @default(uuid()) @db.Uuid
+  restaurantId      String                    @map("restaurant_id") @db.Uuid
+  requestedPlanId   String                    @map("requested_plan_id") @db.Uuid
+  requestedByUserId String                    @map("requested_by_user_id") @db.Uuid
+  status            SubscriptionRequestStatus @default(PENDING)
+  notes             String?                   @db.Text
+  billingInterval   BillingInterval?          @map("billing_interval")
+  reviewedByUserId  String?                   @map("reviewed_by_user_id") @db.Uuid
+  subscriptionId    String?                   @map("subscription_id") @db.Uuid
+  requestedAt       DateTime                  @default(now()) @map("requested_at")
+  reviewedAt        DateTime?                 @map("reviewed_at")
+  rejectionReason   String?                   @map("rejection_reason") @db.Text
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @updatedAt @map("updated_at")
+
+  restaurant        Restaurant                @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  requestedPlan     SubscriptionPlan          @relation(fields: [requestedPlanId], references: [id], onDelete: Restrict)
+  requestedByUser   User                      @relation("RequestedSubscriptions", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  reviewedByUser    User?                     @relation("ReviewedSubscriptionRequests", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  subscription      Subscription?             @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId])
+  @@index([status])
+  @@index([requestedAt])
+  @@index([subscriptionId])
+  @@map("subscription_requests")
 }

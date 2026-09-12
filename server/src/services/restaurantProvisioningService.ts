@@ -208,43 +208,9 @@ export class RestaurantProvisioningService {
         },
       });
 
-      // 4b. Initialize Tenant Subscription (PENDING until payment)
-      const defaultPlan = await tx.subscriptionPlan.findFirst({
-        where: { active: true },
-        orderBy: { price: 'asc' },
-      });
-
-      if (defaultPlan) {
-        const now = new Date();
-        const trialDays = defaultPlan.trialDays || 0;
-        let trialEndsAt: Date | null = null;
-        let currentPeriodEnd: Date;
-        let initialStatus: SubscriptionStatus = SubscriptionStatus.PENDING;
-
-        if (trialDays > 0) {
-          trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
-          currentPeriodEnd = trialEndsAt;
-          initialStatus = SubscriptionStatus.ACTIVE;
-        } else {
-          currentPeriodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-        }
-
-        await tx.subscription.create({
-          data: {
-            restaurantId: restaurant.id,
-            planId: defaultPlan.id,
-            status: initialStatus,
-            startsAt: now,
-            currentPeriodStart: now,
-            currentPeriodEnd,
-            trialEndsAt,
-            autoRenew: true,
-            provider: 'MOCK',
-            agreedPrice: defaultPlan.price,
-            agreedCurrency: defaultPlan.currency,
-          },
-        });
-      }
+      // 4b. Phase 13C: Strict No-Subscription Rule
+      // Newly created restaurants MUST NEVER receive an ACTIVE subscription automatically.
+      // No plan is automatically assigned. No payment is assumed.
 
       // 5. Generate secure random invitation token and store hash
       const rawToken = crypto.randomBytes(32).toString('hex');
@@ -298,33 +264,33 @@ export class RestaurantProvisioningService {
         },
       });
 
-      // 7. Transition Restaurant to ACTIVE state
-      const activeRestaurant = await tx.restaurant.update({
+      // 7. Transition Restaurant to SUBSCRIPTION_PENDING state (Phase 13C)
+      const pendingRestaurant = await tx.restaurant.update({
         where: { id: restaurant.id },
         data: {
-          provisioningStatus: ProvisioningStatus.ACTIVE,
-          activatedAt: new Date(),
+          provisioningStatus: ProvisioningStatus.SUBSCRIPTION_PENDING,
+          activatedAt: null,
         },
       });
 
       await tx.auditLog.create({
         data: {
-          restaurantId: activeRestaurant.id,
+          restaurantId: pendingRestaurant.id,
           userId: actorUserId,
           action: AuditAction.RESTAURANT_PROVISION_SUCCESS,
           entityType: 'Restaurant',
-          entityId: activeRestaurant.id,
+          entityId: pendingRestaurant.id,
           actorPlatformRole: actorPlatformRole || null,
           ipAddress: ipAddress || null,
           metadata: {
             actorPlatformRole,
-            status: 'ACTIVE',
+            status: 'SUBSCRIPTION_PENDING',
           },
         },
       });
 
       return {
-        restaurant: activeRestaurant,
+        restaurant: pendingRestaurant,
         owner: {
           id: user.id,
           name: user.name,

@@ -1,4 +1,4 @@
-import { PrismaClient, MediaType, QrTargetType, AuditAction, Role, PlatformRole, BillingInterval, SubscriptionStatus } from '@prisma/client';
+import { PrismaClient, MediaType, QrTargetType, AuditAction, Role, PlatformRole, BillingInterval, SubscriptionStatus, SubscriptionAssignmentType } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -145,6 +145,8 @@ async function main() {
           restaurantId: restaurant.id,
           planId: proPlan.id,
           status: SubscriptionStatus.ACTIVE,
+          assignmentType: SubscriptionAssignmentType.COMPLIMENTARY,
+          assignmentReason: 'Platform demo restaurant complimentary subscription',
           startsAt: now,
           currentPeriodStart: now,
           currentPeriodEnd: periodEnd,
@@ -160,6 +162,8 @@ async function main() {
         where: { id: existingSub.id },
         data: {
           status: SubscriptionStatus.ACTIVE,
+          assignmentType: SubscriptionAssignmentType.COMPLIMENTARY,
+          assignmentReason: 'Platform demo restaurant complimentary subscription',
           currentPeriodEnd: periodEnd,
         },
       });

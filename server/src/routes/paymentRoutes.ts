@@ -7,6 +7,7 @@ import { authenticateToken, requireRestaurantAccess, requirePermission } from '.
 import { paymentCreationRateLimiter } from '../middleware/rateLimiter';
 import { validateUuidParams } from '../middleware/validation';
 import { hasPermission } from '../constants/permissions';
+import { requireActiveSubscription, requireRestaurantServiceActive } from '../middleware/subscriptionMiddleware';
 
 export const paymentRouter = Router();
 
@@ -22,6 +23,7 @@ export const paymentRouter = Router();
 paymentRouter.post(
   '/payments',
   paymentCreationRateLimiter,
+  requireRestaurantServiceActive(),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const {
@@ -225,6 +227,8 @@ paymentRouter.post(
 // =============================================================================
 // ADMIN / STAFF PAYMENT OPERATIONS
 // =============================================================================
+
+paymentRouter.use('/restaurants/:id', authenticateToken, requireActiveSubscription());
 
 /**
  * GET /api/restaurants/:id/payments

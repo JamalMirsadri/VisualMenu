@@ -4,7 +4,9 @@ import {
   NotificationSeverity,
   NotificationType,
   Prisma,
+  SubscriptionAssignmentType,
   SubscriptionPaymentStatus,
+  SubscriptionRequestStatus,
   SubscriptionStatus,
 } from '@prisma/client';
 import { prisma } from '../../prisma';
@@ -794,6 +796,13 @@ export class SubscriptionService {
   }
 
   /**
+   * Alias for getSubscriptionStatus for test compatibility
+   */
+  static async getRestaurantSubscription(restaurantId: string) {
+    return this.getSubscriptionStatus(restaurantId);
+  }
+
+  /**
    * Evaluate subscriptions and transition ACTIVE -> GRACE_PERIOD -> EXPIRED
    * Called hourly by SubscriptionScheduler
    */
@@ -926,5 +935,682 @@ export class SubscriptionService {
       message: 'Your subscription has expired. Renew to restore restaurant administration access.',
       severity: NotificationSeverity.CRITICAL,
     });
+  }
+
+  // =============================================================================
+  // PHASE 13C: SUBSCRIPTION REQUEST, PAYMENT ACTIVATION & MANUAL ASSIGN/REVOKE
+  // =============================================================================
+
+  /**
+   * Owner explicitly requests a subscription
+   */
+  static async createSubscriptionRequest(input: {
+    restaurantId: string;
+    requestedPlanId: string;
+    requestedByUserId: string;
+    notes?: string;
+    billingInterval?: BillingInterval;
+  }) {
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: input.restaurantId },
+    });
+    if (!restaurant) {
+      const err: any = new Error('Restaurant not found.');
+      err.statusCode = 404;
+      err.errorCode = 'RESTAURANT_NOT_FOUND';
+      throw err;
+    }
+
+    const plan = await prisma.subscriptionPlan.findUnique({
+      where: { id: input.requestedPlanId },
+    });
+    if (!plan || !plan.active) {
+      const err: any = new Error('Requested plan does not exist or is inactive.');
+      err.statusCode = 400;
+      err.errorCode = 'INVALID_PLAN';
+      throw err;
+    }
+
+    const request = await prisma.subscriptionRequest.create({
+      data: {
+        restaurantId: input.restaurantId,
+        requestedPlanId: input.requestedPlanId,
+        requestedByUserId: input.requestedByUserId,
+        status: SubscriptionRequestStatus.PENDING,
+        notes: input.notes?.trim() || null,
+        billingInterval: input.billingInterval || plan.billingInterval,
+      },
+      include: {
+        requestedPlan: true,
+        requestedByUser: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+
+    await AuditService.log({
+      restaurantId: input.restaurantId,
+      userId: input.requestedByUserId,
+      action: AuditAction.SUBSCRIPTION_REQUESTED,
+      entityType: 'SubscriptionRequest',
+      entityId: request.id,
+      newValues: {
+        requestedPlanId: input.requestedPlanId,
+        planName: plan.name,
+        price: plan.price,
+        billingInterval: request.billingInterval,
+      },
+    });
+
+    await NotificationService.createNotification({
+      restaurantId: input.restaurantId,
+      type: NotificationType.SUBSCRIPTION_REQUESTED,
+      title: 'Subscription Requested',
+      message: `You have submitted a request for the ${plan.name} plan. Proceed to payment or await platform review.`,
+      severity: NotificationSeverity.INFO,
+      metadata: {
+        requestId: request.id,
+        planId: plan.id,
+        planName: plan.name,
+      },
+    });
+
+    try {
+      realtimeService.broadcastToRestaurant(input.restaurantId, 'subscription_request_created' as any, {
+        requestId: request.id,
+        planName: plan.name,
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    return request;
+  }
+
+  /**
+   * Get subscription requests for a restaurant or across platform
+   */
+  static async getSubscriptionRequests(filter?: {
+    restaurantId?: string;
+    status?: SubscriptionRequestStatus;
+  }) {
+    return prisma.subscriptionRequest.findMany({
+      where: {
+        ...(filter?.restaurantId ? { restaurantId: filter.restaurantId } : {}),
+        ...(filter?.status ? { status: filter.status } : {}),
+      },
+      include: {
+        requestedPlan: true,
+        requestedByUser: {
+          select: { id: true, name: true, email: true },
+        },
+        reviewedByUser: {
+          select: { id: true, name: true, email: true },
+        },
+        subscription: {
+          include: { plan: true },
+        },
+      },
+      orderBy: { requestedAt: 'desc' },
+    });
+  }
+
+  /**
+   * Platform Admin reviews a subscription request (APPROVE or REJECT)
+   */
+  static async reviewSubscriptionRequest(input: {
+    requestId: string;
+    reviewerUserId: string;
+    action: 'APPROVE' | 'REJECT';
+    rejectionReason?: string;
+  }) {
+    const request = await prisma.subscriptionRequest.findUnique({
+      where: { id: input.requestId },
+      include: { requestedPlan: true, restaurant: true },
+    });
+
+    if (!request) {
+      const err: any = new Error('Subscription request not found.');
+      err.statusCode = 404;
+      err.errorCode = 'REQUEST_NOT_FOUND';
+      throw err;
+    }
+
+    const now = new Date();
+
+    if (input.action === 'REJECT') {
+      if (!input.rejectionReason || !input.rejectionReason.trim()) {
+        const err: any = new Error('Rejection reason is mandatory.');
+        err.statusCode = 400;
+        err.errorCode = 'REJECTION_REASON_REQUIRED';
+        throw err;
+      }
+      const updated = await prisma.subscriptionRequest.update({
+        where: { id: input.requestId },
+        data: {
+          status: SubscriptionRequestStatus.REJECTED,
+          reviewedAt: now,
+          reviewedByUserId: input.reviewerUserId,
+          rejectionReason: input.rejectionReason?.trim() || 'Request declined by platform administration.',
+        },
+        include: { requestedPlan: true },
+      });
+
+      await AuditService.log({
+        restaurantId: request.restaurantId,
+        userId: input.reviewerUserId,
+        action: AuditAction.UPDATE,
+        entityType: 'SubscriptionRequest',
+        entityId: request.id,
+        newValues: { status: 'REJECTED', reason: updated.rejectionReason },
+      });
+
+      await NotificationService.createNotification({
+        restaurantId: request.restaurantId,
+        type: NotificationType.SYSTEM_ALERT,
+        title: 'Subscription Request Declined',
+        message: `Your request for the ${request.requestedPlan.name} plan was declined: ${updated.rejectionReason}`,
+        severity: NotificationSeverity.WARNING,
+      });
+
+      return updated;
+    }
+
+    // APPROVE -> Requires Payment (or Complimentary if marked)
+    const updated = await prisma.subscriptionRequest.update({
+      where: { id: input.requestId },
+      data: {
+        status: SubscriptionRequestStatus.PAYMENT_REQUIRED,
+        reviewedAt: now,
+        reviewedByUserId: input.reviewerUserId,
+      },
+      include: { requestedPlan: true },
+    });
+
+    await AuditService.log({
+      restaurantId: request.restaurantId,
+      userId: input.reviewerUserId,
+      action: AuditAction.SUBSCRIPTION_PAYMENT_REQUIRED,
+      entityType: 'SubscriptionRequest',
+      entityId: request.id,
+      newValues: { status: 'PAYMENT_REQUIRED' },
+    });
+
+    await NotificationService.createNotification({
+      restaurantId: request.restaurantId,
+      type: NotificationType.SUBSCRIPTION_PAYMENT_REQUIRED,
+      title: 'Subscription Request Approved — Payment Required',
+      message: `Your subscription request for ${request.requestedPlan.name} has been approved. Please complete payment to activate.`,
+      severity: NotificationSeverity.INFO,
+      metadata: {
+        requestId: request.id,
+        planId: request.requestedPlanId,
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Confirm payment and activate subscription
+   */
+  static async activateFromPayment(input: {
+    restaurantId: string;
+    planId: string;
+    amount: number;
+    currency: string;
+    provider: string;
+    providerTransactionId: string;
+    requestId?: string;
+    actorUserId?: string;
+  }) {
+    const plan = await prisma.subscriptionPlan.findUnique({
+      where: { id: input.planId },
+    });
+    if (!plan) {
+      const err: any = new Error('Plan not found.');
+      err.statusCode = 404;
+      err.errorCode = 'PLAN_NOT_FOUND';
+      throw err;
+    }
+
+    const now = new Date();
+    const periodEnd = this.calculateNextPeriodEnd(now, plan.billingInterval, plan.intervalCount);
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Find existing active/pending subscription or create new
+      let subscription = await tx.subscription.findFirst({
+        where: { restaurantId: input.restaurantId },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (subscription) {
+        subscription = await tx.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            planId: plan.id,
+            status: SubscriptionStatus.ACTIVE,
+            assignmentType: SubscriptionAssignmentType.PAID,
+            startsAt: now,
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+            agreedPrice: new Prisma.Decimal(input.amount),
+            agreedCurrency: input.currency,
+            provider: input.provider,
+            providerSubscriptionId: input.providerTransactionId,
+            autoRenew: true,
+          },
+        });
+      } else {
+        subscription = await tx.subscription.create({
+          data: {
+            restaurantId: input.restaurantId,
+            planId: plan.id,
+            status: SubscriptionStatus.ACTIVE,
+            assignmentType: SubscriptionAssignmentType.PAID,
+            startsAt: now,
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+            agreedPrice: new Prisma.Decimal(input.amount),
+            agreedCurrency: input.currency,
+            provider: input.provider,
+            providerSubscriptionId: input.providerTransactionId,
+            autoRenew: true,
+          },
+        });
+      }
+
+      // 2. Link and complete request if provided
+      if (input.requestId && input.requestId.trim()) {
+        await tx.subscriptionRequest.update({
+          where: { id: input.requestId.trim() },
+          data: {
+            status: SubscriptionRequestStatus.PAID,
+            subscriptionId: subscription.id,
+            reviewedAt: now,
+          },
+        });
+      }
+
+      // 3. Record Payment
+      await tx.subscriptionPayment.create({
+        data: {
+          subscriptionId: subscription.id,
+          amount: new Prisma.Decimal(input.amount),
+          currency: input.currency,
+          status: SubscriptionPaymentStatus.SUCCEEDED,
+          provider: input.provider,
+          providerTransactionId: input.providerTransactionId,
+          paidAt: now,
+        },
+      });
+
+      // 4. Record Invoice
+      const invoiceNumber = `INV-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+      await tx.subscriptionInvoice.create({
+        data: {
+          subscriptionId: subscription.id,
+          invoiceNumber,
+          periodStart: now,
+          periodEnd,
+          subtotal: new Prisma.Decimal(input.amount),
+          total: new Prisma.Decimal(input.amount),
+          currency: input.currency,
+          status: 'PAID',
+          issuedAt: now,
+          paidAt: now,
+        },
+      });
+
+      // 5. Subscription Event
+      await tx.subscriptionEvent.create({
+        data: {
+          subscriptionId: subscription.id,
+          eventType: 'SUBSCRIPTION_ACTIVATED_PAYMENT',
+          toStatus: SubscriptionStatus.ACTIVE,
+          actorId: input.actorUserId || null,
+          reason: `Activated via confirmed payment of ${input.currency} ${input.amount}`,
+        },
+      });
+
+      // 6. Transition Restaurant to ACTIVE if it was SUBSCRIPTION_PENDING
+      await tx.restaurant.update({
+        where: { id: input.restaurantId },
+        data: {
+          provisioningStatus: 'ACTIVE',
+          activatedAt: now,
+        },
+      });
+
+      return subscription;
+    });
+
+    await AuditService.log({
+      restaurantId: input.restaurantId,
+      userId: input.actorUserId,
+      action: AuditAction.SUBSCRIPTION_ACTIVATED,
+      entityType: 'Subscription',
+      entityId: result.id,
+      newValues: {
+        planId: plan.id,
+        planName: plan.name,
+        amount: input.amount,
+        currency: input.currency,
+        status: SubscriptionStatus.ACTIVE,
+        assignmentType: 'PAID',
+      },
+    });
+
+    await NotificationService.createNotification({
+      restaurantId: input.restaurantId,
+      type: NotificationType.SUBSCRIPTION_PAYMENT_SUCCESS,
+      title: 'Subscription Activated',
+      message: `Your payment of ${input.currency} ${input.amount} was confirmed. ${plan.name} plan is now ACTIVE.`,
+      severity: NotificationSeverity.INFO,
+    });
+
+    try {
+      realtimeService.broadcastToRestaurant(input.restaurantId, 'subscription_status_changed' as any, {
+        status: SubscriptionStatus.ACTIVE,
+        subscriptionId: result.id,
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    return result;
+  }
+
+  /**
+   * Platform Admin manually assigns a subscription (MANUAL or COMPLIMENTARY)
+   */
+  static async manuallyAssignSubscription(input: {
+    restaurantId: string;
+    planId: string;
+    assignmentType: 'MANUAL' | 'COMPLIMENTARY';
+    periodEnd: Date;
+    reason: string;
+    assignedByUserId: string;
+    startsAt?: Date;
+    agreedPrice?: number;
+    currency?: string;
+  }) {
+    if (!input.reason || !input.reason.trim()) {
+      const err: any = new Error('An explicit reason is required for manual subscription assignment.');
+      err.statusCode = 400;
+      err.errorCode = 'REASON_REQUIRED';
+      throw err;
+    }
+
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: input.restaurantId },
+    });
+    if (!restaurant) {
+      const err: any = new Error('Restaurant not found.');
+      err.statusCode = 404;
+      err.errorCode = 'RESTAURANT_NOT_FOUND';
+      throw err;
+    }
+
+    const plan = await prisma.subscriptionPlan.findUnique({
+      where: { id: input.planId },
+    });
+    if (!plan) {
+      const err: any = new Error('Plan not found.');
+      err.statusCode = 404;
+      err.errorCode = 'PLAN_NOT_FOUND';
+      throw err;
+    }
+
+    const now = input.startsAt || new Date();
+    const agreedPrice = input.agreedPrice !== undefined ? new Prisma.Decimal(input.agreedPrice) : (input.assignmentType === 'COMPLIMENTARY' ? new Prisma.Decimal(0) : plan.price);
+    const agreedCurrency = input.currency || plan.currency;
+
+    const result = await prisma.$transaction(async (tx) => {
+      let subscription = await tx.subscription.findFirst({
+        where: { restaurantId: input.restaurantId },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const assignmentTypeEnum = input.assignmentType === 'COMPLIMENTARY'
+        ? SubscriptionAssignmentType.COMPLIMENTARY
+        : SubscriptionAssignmentType.MANUAL;
+
+      if (subscription) {
+        subscription = await tx.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            planId: plan.id,
+            status: SubscriptionStatus.ACTIVE,
+            assignmentType: assignmentTypeEnum,
+            assignmentReason: input.reason.trim(),
+            assignedByUserId: input.assignedByUserId,
+            startsAt: now,
+            currentPeriodStart: now,
+            currentPeriodEnd: input.periodEnd,
+            agreedPrice,
+            agreedCurrency,
+            autoRenew: input.assignmentType !== 'COMPLIMENTARY',
+            cancelledAt: null,
+            endedAt: null,
+          },
+        });
+      } else {
+        subscription = await tx.subscription.create({
+          data: {
+            restaurantId: input.restaurantId,
+            planId: plan.id,
+            status: SubscriptionStatus.ACTIVE,
+            assignmentType: assignmentTypeEnum,
+            assignmentReason: input.reason.trim(),
+            assignedByUserId: input.assignedByUserId,
+            startsAt: now,
+            currentPeriodStart: now,
+            currentPeriodEnd: input.periodEnd,
+            agreedPrice,
+            agreedCurrency,
+            autoRenew: input.assignmentType !== 'COMPLIMENTARY',
+          },
+        });
+      }
+
+      await tx.subscriptionEvent.create({
+        data: {
+          subscriptionId: subscription.id,
+          eventType: 'SUBSCRIPTION_MANUALLY_ASSIGNED',
+          toStatus: SubscriptionStatus.ACTIVE,
+          actorId: input.assignedByUserId,
+          reason: input.reason.trim(),
+          metadata: {
+            assignmentType: input.assignmentType,
+            agreedPrice: agreedPrice.toString(),
+            currentPeriodEnd: input.periodEnd.toISOString(),
+          },
+        },
+      });
+
+      // Ensure restaurant is ACTIVE
+      await tx.restaurant.update({
+        where: { id: input.restaurantId },
+        data: {
+          provisioningStatus: 'ACTIVE',
+          activatedAt: new Date(),
+        },
+      });
+
+      return subscription;
+    });
+
+    await AuditService.log({
+      restaurantId: input.restaurantId,
+      userId: input.assignedByUserId,
+      action: AuditAction.SUBSCRIPTION_MANUALLY_ASSIGNED,
+      entityType: 'Subscription',
+      entityId: result.id,
+      newValues: {
+        assignmentType: input.assignmentType,
+        planName: plan.name,
+        periodEnd: input.periodEnd.toISOString(),
+        reason: input.reason.trim(),
+      },
+    });
+
+    await NotificationService.createNotification({
+      restaurantId: input.restaurantId,
+      type: NotificationType.SUBSCRIPTION_RENEWED,
+      title: 'Subscription Assigned by Platform',
+      message: `A ${input.assignmentType.toLowerCase()} subscription to ${plan.name} has been activated for your restaurant until ${input.periodEnd.toLocaleDateString()}.`,
+      severity: NotificationSeverity.INFO,
+    });
+
+    try {
+      realtimeService.broadcastToRestaurant(input.restaurantId, 'subscription_status_changed' as any, {
+        status: SubscriptionStatus.ACTIVE,
+        subscriptionId: result.id,
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    return result;
+  }
+
+  /**
+   * Platform Admin immediately revokes subscription (immediate suspension)
+   */
+  static async revokeSubscription(subscriptionId: string, actorUserId: string, reason: string) {
+    if (!reason || !reason.trim()) {
+      const err: any = new Error('An explicit reason is required to revoke a subscription.');
+      err.statusCode = 400;
+      err.errorCode = 'REASON_REQUIRED';
+      throw err;
+    }
+
+    const sub = await prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+      include: { plan: true },
+    });
+    if (!sub) {
+      const err: any = new Error('Subscription not found.');
+      err.statusCode = 404;
+      err.errorCode = 'SUBSCRIPTION_NOT_FOUND';
+      throw err;
+    }
+
+    const now = new Date();
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const res = await tx.subscription.update({
+        where: { id: subscriptionId },
+        data: {
+          status: SubscriptionStatus.SUSPENDED,
+          autoRenew: false,
+          endedAt: now,
+          cancelledAt: now,
+        },
+      });
+
+      await tx.subscriptionEvent.create({
+        data: {
+          subscriptionId,
+          eventType: 'SUBSCRIPTION_REVOKED',
+          fromStatus: sub.status,
+          toStatus: SubscriptionStatus.SUSPENDED,
+          actorId: actorUserId,
+          reason: reason.trim(),
+        },
+      });
+
+      return res;
+    });
+
+    await AuditService.log({
+      restaurantId: sub.restaurantId,
+      userId: actorUserId,
+      action: AuditAction.SUBSCRIPTION_REVOKED,
+      entityType: 'Subscription',
+      entityId: subscriptionId,
+      oldValues: { status: sub.status },
+      newValues: { status: SubscriptionStatus.SUSPENDED, reason: reason.trim() },
+    });
+
+    await NotificationService.createNotification({
+      restaurantId: sub.restaurantId,
+      type: NotificationType.SUBSCRIPTION_EXPIRED,
+      title: 'Subscription Revoked',
+      message: `Your subscription has been revoked by platform administration: ${reason.trim()}`,
+      severity: NotificationSeverity.CRITICAL,
+    });
+
+    try {
+      realtimeService.broadcastToRestaurant(sub.restaurantId, 'subscription_status_changed' as any, {
+        status: SubscriptionStatus.SUSPENDED,
+        subscriptionId: updated.id,
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    return updated;
+  }
+
+  /**
+   * Cancel auto-renew: subscription remains ACTIVE until currentPeriodEnd
+   */
+  static async cancelAutoRenew(subscriptionId: string, actorUserId?: string, reason?: string) {
+    const sub = await prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+    });
+    if (!sub) {
+      const err: any = new Error('Subscription not found.');
+      err.statusCode = 404;
+      err.errorCode = 'SUBSCRIPTION_NOT_FOUND';
+      throw err;
+    }
+
+    const now = new Date();
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const res = await tx.subscription.update({
+        where: { id: subscriptionId },
+        data: {
+          autoRenew: false,
+          cancelledAt: now,
+        },
+      });
+
+      await tx.subscriptionEvent.create({
+        data: {
+          subscriptionId,
+          eventType: 'SUBSCRIPTION_AUTO_RENEW_CANCELLED',
+          fromStatus: sub.status,
+          toStatus: sub.status,
+          actorId: actorUserId || null,
+          reason: reason?.trim() || 'Auto-renew cancelled. Access remains active until period end.',
+        },
+      });
+
+      return res;
+    });
+
+    await AuditService.log({
+      restaurantId: sub.restaurantId,
+      userId: actorUserId,
+      action: AuditAction.SUBSCRIPTION_CANCELLED,
+      entityType: 'Subscription',
+      entityId: subscriptionId,
+      newValues: { autoRenew: false, periodEnd: sub.currentPeriodEnd.toISOString() },
+    });
+
+    try {
+      realtimeService.broadcastToRestaurant(sub.restaurantId, 'subscription_updated' as any, {
+        autoRenew: false,
+        subscriptionId: updated.id,
+      });
+    } catch {
+      // Non-blocking
+    }
+
+    return updated;
   }
 }
