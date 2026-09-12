@@ -15,6 +15,7 @@
     "test:phase7": "tsx server/tests/phase7.test.ts",
     "test:phase8": "tsx server/tests/phase8.test.ts",
     "test:platform": "tsx server/tests/platformAdmin.test.ts",
+    "test:isolation": "tsx server/tests/tenantIsolation.test.ts",
     "test:provisioning": "tsx server/tests/provisioning.test.ts",
     "test:staff": "tsx server/tests/staff.test.ts",
     "test:operations": "tsx server/tests/operations.test.ts",

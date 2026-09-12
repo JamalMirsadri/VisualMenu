@@ -11,8 +11,18 @@ export const restaurantRouter = Router();
 // GET /api/restaurants
 restaurantRouter.get('/', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    let whereClause = {};
-    if (req.user) {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        errorCode: 'AUTH_REQUIRED',
+        message: 'Authentication required.',
+      });
+      return;
+    }
+
+    // Normal restaurant users only receive their own assigned restaurant(s)
+    let whereClause: any = {};
+    if (req.user.platformRole !== 'PLATFORM_ADMIN') {
       whereClause = {
         userRestaurants: {
           some: {
@@ -126,8 +136,18 @@ restaurantRouter.patch(
 );
 
 // POST /api/restaurants
+// Restaurant creation is strictly restricted to Platform Administrators
 restaurantRouter.post('/', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    if (req.user?.platformRole !== 'PLATFORM_ADMIN') {
+      res.status(403).json({
+        success: false,
+        errorCode: 'PLATFORM_ACCESS_DENIED',
+        message: 'Restaurant creation is restricted to Platform Administrators. Use the Platform SaaS portal.',
+      });
+      return;
+    }
+
     const {
       slug,
       name,

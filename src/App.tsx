@@ -15,7 +15,6 @@ import { AdminMediaPage } from './pages/admin/AdminMediaPage';
 import { AdminMenuPreviewPage } from './pages/admin/AdminMenuPreviewPage';
 import { AdminRestaurantPage } from './pages/admin/AdminRestaurantPage';
 import { AdminQrPage } from './pages/admin/AdminQrPage';
-import { AdminRestaurantsPage } from './pages/admin/AdminRestaurantsPage';
 import { AdminPaymentsPage } from './pages/admin/AdminPaymentsPage';
 import { AdminCashPage } from './pages/admin/AdminCashPage';
 import { AdminCustomersPage } from './pages/admin/AdminCustomersPage';
@@ -77,7 +76,7 @@ export const App: React.FC = () => {
             <Route path="menu-preview" element={<PermissionRoute permission="VIEW_MENU"><AdminMenuPreviewPage /></PermissionRoute>} />
             <Route path="staff" element={<PermissionRoute permission="VIEW_STAFF"><AdminStaffPage /></PermissionRoute>} />
             <Route path="users" element={<PermissionRoute permission="VIEW_STAFF"><AdminStaffPage /></PermissionRoute>} />
-            <Route path="restaurants" element={<PermissionRoute permission="MANAGE_RESTAURANT_SETTINGS"><AdminRestaurantsPage /></PermissionRoute>} />
+            <Route path="restaurants" element={<Navigate to="/admin/restaurant" replace />} />
             <Route path="restaurant" element={<PermissionRoute permission="MANAGE_RESTAURANT_SETTINGS"><AdminRestaurantPage /></PermissionRoute>} />
             <Route path="qr" element={<PermissionRoute permission="VIEW_QR_CODES"><AdminQrPage /></PermissionRoute>} />
           </Route>

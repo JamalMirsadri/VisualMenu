@@ -11,11 +11,23 @@ import {
   Shield,
   Palette,
 } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { restaurantService } from '../../services/restaurantService';
 import type { Restaurant } from '../../types';
 
 export const AdminRestaurantsPage: React.FC = () => {
+  const { isPlatformUser } = useAuth();
+
+  // Tenant isolation guard: normal restaurant users must only manage their own restaurant settings
+  if (!isPlatformUser) {
+    return <Navigate to="/admin/restaurant" replace />;
+  }
+
+  return <Navigate to="/platform/restaurants" replace />;
+};
+
+export const _AdminRestaurantsPageLegacy: React.FC = () => {
   const { restaurants, activeRestaurant, setActiveRestaurant } = useAuth();
   const [restaurantList, setRestaurantList] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);

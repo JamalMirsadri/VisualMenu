@@ -99,3 +99,4 @@ Desktop.ini
 !docs/**/*.md
 !graphify/
 !.graphify/
+graphify-out/cache/

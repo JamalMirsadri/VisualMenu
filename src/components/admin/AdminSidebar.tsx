@@ -11,7 +11,6 @@ import {
   RotateCcw,
   Settings,
   UtensilsCrossed,
-  Building2,
   ClipboardList,
   ChefHat,
   Armchair,
@@ -27,15 +26,19 @@ import { useAuth } from '../../context/AuthContext';
 interface AdminSidebarProps {
   restaurant: Restaurant | null;
   onResetData?: () => void;
+  onNavigate?: () => void;
 }
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   restaurant,
   onResetData,
+  onNavigate,
 }) => {
-  const { user, role, logout, restaurants, activeRestaurant, setActiveRestaurant, hasPermission } = useAuth();
+  const { user, role, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
 
+  // All restaurant-level operational navigation items
+  // Note: All Restaurants and cross-tenant directories are strictly platform-only under /platform/*
   const allNavItems = [
     { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, permission: 'VIEW_DASHBOARD' },
     { to: '/admin/floor', label: 'Floor Operations', icon: LayoutGrid, permission: 'VIEW_TABLES' },
@@ -51,7 +54,6 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { to: '/admin/menu-preview', label: 'Menu Preview', icon: Eye, permission: 'VIEW_MENU' },
     { to: '/admin/qr', label: 'QR Codes', icon: QrCode, permission: 'VIEW_QR_CODES' },
     { to: '/admin/staff', label: 'Staff & Roles', icon: Users, permission: 'VIEW_STAFF' },
-    { to: '/admin/restaurants', label: 'All Restaurants', icon: Building2, permission: 'MANAGE_RESTAURANT_SETTINGS' },
     { to: '/admin/restaurant', label: 'Restaurant Settings', icon: Settings, permission: 'MANAGE_RESTAURANT_SETTINGS' },
   ];
 
@@ -78,10 +80,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   };
 
   return (
-    <aside className="w-64 shrink-0 bg-zinc-950 border-r border-zinc-800 flex flex-col justify-between p-4 h-full">
-      <div className="space-y-5">
-        {/* Brand header */}
-        <div className="flex items-center gap-3 px-2 py-2">
+    <aside
+      id="admin-sidebar"
+      aria-label="Restaurant management navigation"
+      className="w-64 shrink-0 bg-zinc-950 border-r border-zinc-800 flex flex-col h-full overflow-hidden select-none"
+    >
+      {/* Top Header: Brand Header & Customer Menu Link */}
+      <div className="p-4 pb-3 shrink-0 border-b border-zinc-800/80 space-y-3 bg-zinc-950">
+        <div className="flex items-center gap-3 px-1">
           {restaurant?.logo ? (
             <img
               src={restaurant.logo}
@@ -94,7 +100,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </div>
           )}
           <div className="overflow-hidden min-w-0">
-            <h2 className="font-serif-luxury text-sm font-bold text-white tracking-wide truncate">
+            <h2 className="font-serif-luxury text-sm font-bold text-white tracking-wide truncate" title={restaurant?.name}>
               {restaurant?.name || 'Loading Restaurant...'}
             </h2>
             <div className="flex items-center gap-1.5 mt-0.5">
@@ -105,55 +111,35 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </div>
         </div>
 
-        {/* Multi-Restaurant Switcher (if user assigned to multiple) */}
-        {restaurants.length > 1 && (
-          <div className="px-2">
-            <label className="block text-[10px] uppercase font-bold text-zinc-400 tracking-wider mb-1 flex items-center gap-1">
-              <Building2 className="w-3 h-3" />
-              <span>Active Tenant</span>
-            </label>
-            <select
-              value={activeRestaurant?.slug || ''}
-              onChange={(e) => {
-                const selected = restaurants.find((r) => r.slug === e.target.value);
-                if (selected) setActiveRestaurant(selected);
-              }}
-              className="w-full text-xs py-1.5 px-2.5 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-200 focus:outline-none focus:border-amber-400"
-            >
-              {restaurants.map((r) => (
-                <option key={r.id} value={r.slug}>
-                  {r.name} ({r.role})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {/* Live Menu Preview Link */}
-        <div className="px-2">
-          <a
-            href={`/menu/${restaurant?.slug || 'demo-restaurant'}`}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-between w-full px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-transparent border border-amber-400/40 text-amber-300 hover:text-white hover:border-amber-400 text-xs font-semibold tracking-wide transition-all group shadow-sm"
-          >
-            <span className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Live Customer Menu
-            </span>
-            <ExternalLink className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-          </a>
-        </div>
+        <a
+          href={`/menu/${restaurant?.slug || 'demo-restaurant'}`}
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center justify-between w-full px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-transparent border border-amber-400/40 text-amber-300 hover:text-white hover:border-amber-400 text-xs font-semibold tracking-wide transition-all group shadow-sm min-h-[38px]"
+        >
+          <span className="flex items-center gap-2 truncate">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="truncate">Live Customer Menu</span>
+          </span>
+          <ExternalLink className="w-3.5 h-3.5 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+        </a>
+      </div>
 
-        {/* Navigation list */}
-        <nav className="space-y-1">
+      {/* Independently Scrollable Navigation */}
+      <div
+        id="admin-sidebar-nav-container"
+        className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1 custom-scrollbar"
+      >
+        <nav className="space-y-1" aria-label="Restaurant navigation">
           {visibleNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.end}
+              onClick={onNavigate}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all min-h-[40px] ${
                   isActive
                     ? 'bg-amber-500 text-black font-semibold shadow-md shadow-amber-500/20'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
@@ -161,21 +147,21 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
               }
             >
               <item.icon className="w-4 h-4 shrink-0" />
-              <span>{item.label}</span>
+              <span className="truncate">{item.label}</span>
             </NavLink>
           ))}
         </nav>
       </div>
 
       {/* Footer Utilities with Authenticated User Details */}
-      <div className="pt-4 border-t border-zinc-800 space-y-3">
+      <div className="p-4 pt-3 shrink-0 border-t border-zinc-800 bg-zinc-950/95 space-y-3">
         {user && (
           <div className="p-2.5 rounded-xl bg-zinc-900/70 border border-zinc-800/80 flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <div className="text-xs font-semibold text-white truncate">
+              <div className="text-xs font-semibold text-white truncate" title={user.name}>
                 {user.name}
               </div>
-              <div className="text-[10px] text-zinc-400 truncate">
+              <div className="text-[10px] text-zinc-400 truncate" title={user.email}>
                 {user.email}
               </div>
             </div>
@@ -195,7 +181,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {onResetData && (
             <button
               onClick={() => onResetData()}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-amber-300 hover:bg-zinc-900 transition-colors cursor-pointer"
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs text-zinc-400 hover:text-amber-300 hover:bg-zinc-900 transition-colors cursor-pointer min-h-[38px]"
               title="Refresh state from PostgreSQL"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -205,7 +191,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
           <button
             onClick={handleLogout}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-950/30 transition-colors cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-950/30 transition-colors cursor-pointer min-h-[38px]"
             title="Sign out of management portal"
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -213,7 +199,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </button>
         </div>
 
-        <div className="px-2 text-[10px] text-zinc-400 flex items-center justify-between">
+        <div className="px-1 text-[10px] text-zinc-400 flex items-center justify-between">
           <span>AURA Engine</span>
           <span className="text-emerald-400 font-mono">v3.0 Production</span>
         </div>
