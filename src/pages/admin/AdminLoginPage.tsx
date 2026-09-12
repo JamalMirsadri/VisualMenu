@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Sparkles, Lock, Mail, ArrowRight, ShieldCheck, UserCheck } from 'lucide-react';
+import { Sparkles, Lock, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export const AdminLoginPage: React.FC = () => {
   const { login } = useAuth();
@@ -33,25 +33,6 @@ export const AdminLoginPage: React.FC = () => {
       }
     } catch (err: any) {
       setError(err.message || 'Login failed. Please verify your credentials.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleQuickLogin = async (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword('Password123!');
-    try {
-      setSubmitting(true);
-      setError(null);
-      const res = await login(demoEmail, 'Password123!');
-      if (res.user?.platformRole && !location.state?.from) {
-        navigate('/platform', { replace: true });
-      } else {
-        navigate(from, { replace: true });
-      }
-    } catch (err: any) {
-      setError(err.message || 'Quick login failed.');
     } finally {
       setSubmitting(false);
     }
@@ -130,89 +111,6 @@ export const AdminLoginPage: React.FC = () => {
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
-
-        {/* Demo Roles Quick-Login */}
-        <div className="pt-4 border-t border-zinc-800/80 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-              <UserCheck className="w-3.5 h-3.5 text-amber-400" />
-              Quick Demo Access
-            </span>
-            <span className="text-[10px] text-zinc-500 font-mono">Password123!</span>
-          </div>
-
-          {/* Platform SaaS Demo Shortcut */}
-          <button
-            type="button"
-            onClick={() => handleQuickLogin('platformadmin@auramenu.com')}
-            className="w-full p-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent hover:bg-amber-500/25 border border-amber-500/40 text-left transition-all group cursor-pointer flex items-center justify-between"
-          >
-            <div>
-              <div className="text-[10px] font-bold uppercase text-amber-300 tracking-wider flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                <span>Platform Admin (SaaS Control)</span>
-              </div>
-              <div className="text-xs font-semibold text-white mt-0.5">
-                platformadmin@auramenu.com
-              </div>
-            </div>
-            <ArrowRight className="w-4 h-4 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
-          </button>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('owner@auradining.com')}
-              className="p-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-800/80 border border-zinc-800 hover:border-amber-400/40 text-left transition-all group cursor-pointer"
-            >
-              <div className="text-[10px] font-bold uppercase text-amber-400 tracking-wider">
-                Owner
-              </div>
-              <div className="text-xs font-medium text-zinc-300 truncate">
-                Elena Rostova
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('admin@auradining.com')}
-              className="p-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-800/80 border border-zinc-800 hover:border-amber-400/40 text-left transition-all group cursor-pointer"
-            >
-              <div className="text-[10px] font-bold uppercase text-purple-400 tracking-wider">
-                Admin
-              </div>
-              <div className="text-xs font-medium text-zinc-300 truncate">
-                Julian Vance
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('manager@auradining.com')}
-              className="p-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-800/80 border border-zinc-800 hover:border-amber-400/40 text-left transition-all group cursor-pointer"
-            >
-              <div className="text-[10px] font-bold uppercase text-blue-400 tracking-wider">
-                Manager
-              </div>
-              <div className="text-xs font-medium text-zinc-300 truncate">
-                Sophie Laurent
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('staff@auradining.com')}
-              className="p-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-800/80 border border-zinc-800 hover:border-amber-400/40 text-left transition-all group cursor-pointer"
-            >
-              <div className="text-[10px] font-bold uppercase text-emerald-400 tracking-wider">
-                Staff
-              </div>
-              <div className="text-xs font-medium text-zinc-300 truncate">
-                Lucas Moreau
-              </div>
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Security notice footer */}
