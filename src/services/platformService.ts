@@ -242,6 +242,41 @@ export const platformService = {
     );
     return unwrapResponse<any>(res);
   },
+
+  async getRestaurantSubscription(restaurantId: string): Promise<any> {
+    const res = await apiClient.get<any>(`/platform/restaurants/${restaurantId}/subscription`);
+    return unwrapResponse<any>(res);
+  },
+
+  async activateRestaurantSubscription(restaurantId: string, reason?: string): Promise<any> {
+    const res = await apiClient.post<any>(`/platform/restaurants/${restaurantId}/subscription/activate`, { reason });
+    return unwrapResponse<any>(res);
+  },
+
+  async suspendRestaurantSubscription(restaurantId: string, reason: string): Promise<any> {
+    const res = await apiClient.post<any>(`/platform/restaurants/${restaurantId}/subscription/suspend`, { reason });
+    return unwrapResponse<any>(res);
+  },
+
+  async restoreRestaurantSubscription(restaurantId: string, reason?: string): Promise<any> {
+    const res = await apiClient.post<any>(`/platform/restaurants/${restaurantId}/subscription/restore`, { reason });
+    return unwrapResponse<any>(res);
+  },
+
+  async extendRestaurantSubscription(restaurantId: string, days: number, reason?: string): Promise<any> {
+    const res = await apiClient.post<any>(`/platform/restaurants/${restaurantId}/subscription/extend`, { days, reason });
+    return unwrapResponse<any>(res);
+  },
+
+  async changeRestaurantSubscriptionPlan(restaurantId: string, newPlanId: string, reason?: string): Promise<any> {
+    const res = await apiClient.post<any>(`/platform/restaurants/${restaurantId}/subscription/change-plan`, { newPlanId, reason });
+    return unwrapResponse<any>(res);
+  },
+
+  async getSubscriptionPlans(): Promise<any[]> {
+    const res = await apiClient.get<any>(`/platform/subscriptions/plans`);
+    return unwrapResponse<any[]>(res);
+  },
 };
 
 export const ownerInvitationService = {

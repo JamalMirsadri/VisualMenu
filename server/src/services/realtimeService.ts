@@ -24,7 +24,17 @@ export type RealtimeEventName =
   | 'order_ready'
   | 'ORDER_READY'
   | 'order_served'
-  | 'ORDER_SERVED';
+  | 'ORDER_SERVED'
+  | 'subscription_status_changed'
+  | 'SUBSCRIPTION_STATUS_CHANGED'
+  | 'subscription_restored'
+  | 'SUBSCRIPTION_RESTORED'
+  | 'notification_created'
+  | 'NOTIFICATION_CREATED'
+  | 'notification'
+  | 'NOTIFICATION'
+  | 'platform_message'
+  | 'PLATFORM_MESSAGE';
 
 export interface OrderStatusChangedEvent {
   type: 'order_status_changed';
@@ -115,6 +125,13 @@ class RealtimeService {
         subscribers.delete(client);
       }
     }
+  }
+
+  /**
+   * Broadcasts an event to a specific restaurant tenant
+   */
+  public broadcastToRestaurant(restaurantId: string, eventName: RealtimeEventName | string, data: any): void {
+    this.broadcast(`restaurant:${restaurantId}`, eventName as any, data);
   }
 
   /**

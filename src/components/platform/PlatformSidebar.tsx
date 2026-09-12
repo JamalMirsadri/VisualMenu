@@ -9,6 +9,8 @@ import {
   LogOut,
   Utensils,
   ExternalLink,
+  Layers,
+  Send,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -23,6 +25,8 @@ export const PlatformSidebar: React.FC<PlatformSidebarProps> = ({ onItemClick })
   const navItems = [
     { to: '/platform', label: 'Platform Dashboard', icon: LayoutDashboard, end: true },
     { to: '/platform/restaurants', label: 'Restaurants Directory', icon: Building2 },
+    { to: '/platform/subscriptions/plans', label: 'Subscription Plans', icon: Layers },
+    { to: '/platform/messages', label: 'Broadcast Messages', icon: Send },
     { to: '/platform/users', label: 'Platform Users', icon: Users },
     { to: '/platform/audit', label: 'Platform Audit Logs', icon: ShieldCheck },
     { to: '/platform/settings', label: 'Platform Settings', icon: Settings },

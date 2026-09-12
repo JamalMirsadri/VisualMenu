@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
+import { Role } from '@prisma/client';
 
 async function runTests() {
   console.log('🧪 Starting Phase 3 Hardened Database, Auth & API Test Suite...\n');
@@ -20,6 +21,7 @@ async function runTests() {
 
   let ownerToken = '';
   let staffToken = '';
+  let platformAdminToken = '';
   let demoRestaurantId = '';
   let testRestAId = '';
   let testRestBId = '';
@@ -92,6 +94,16 @@ async function runTests() {
       if (res.body.data.restaurants[0]?.role !== 'STAFF') {
         throw new Error(`Expected role STAFF, got ${res.body.data.restaurants[0]?.role}`);
       }
+
+      // Authenticate Platform Admin for restaurant creation
+      const adminRes = await request(app).post('/api/auth/login').send({
+        email: 'platformadmin@auramenu.com',
+        password: 'Password123!',
+      });
+      if (adminRes.status !== 200 || !adminRes.body.data?.token) {
+        throw new Error(`Platform Admin login failed: ${JSON.stringify(adminRes.body)}`);
+      }
+      platformAdminToken = adminRes.body.data.token;
     });
 
     // 6. Protected Routes reject requests missing Bearer token
@@ -112,14 +124,14 @@ async function runTests() {
       }
     });
 
-    // 8. Multi-Tenant Restaurant Creation (With OWNER token)
+    // 8. Multi-Tenant Restaurant Creation (With platform admin and owner assignment)
     await assert('POST /api/restaurants creates distinct isolated restaurants assigned to creator', async () => {
       const slugA = `test-rest-a-${Date.now()}`;
       const slugB = `test-rest-b-${Date.now()}`;
 
       const resA = await request(app)
         .post('/api/restaurants')
-        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
         .send({
           name: 'Restaurant Alpha',
           slug: slugA,
@@ -128,9 +140,20 @@ async function runTests() {
       if (resA.status !== 201) throw new Error(`Restaurant A creation failed: ${JSON.stringify(resA.body)}`);
       testRestAId = resA.body.data.id;
 
+      const ownerUser = await prisma.user.findUnique({ where: { email: 'owner@auradining.com' } });
+      if (ownerUser) {
+        await prisma.userRestaurant.create({
+          data: {
+            userId: ownerUser.id,
+            restaurantId: testRestAId,
+            role: Role.OWNER,
+          },
+        });
+      }
+
       const resB = await request(app)
         .post('/api/restaurants')
-        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
         .send({
           name: 'Restaurant Beta',
           slug: slugB,
@@ -138,13 +161,23 @@ async function runTests() {
         });
       if (resB.status !== 201) throw new Error(`Restaurant B creation failed: ${JSON.stringify(resB.body)}`);
       testRestBId = resB.body.data.id;
+
+      if (ownerUser) {
+        await prisma.userRestaurant.create({
+          data: {
+            userId: ownerUser.id,
+            restaurantId: testRestBId,
+            role: Role.OWNER,
+          },
+        });
+      }
     });
 
     // 9. Duplicate Slug Constraint Validation
     await assert('POST /api/restaurants rejects duplicate slug with 409 Conflict', async () => {
       const res = await request(app)
         .post('/api/restaurants')
-        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
         .send({
           name: 'Duplicate Restaurant',
           slug: 'demo-restaurant',
@@ -660,7 +693,7 @@ async function runTests() {
     await assert('POST /api/restaurants creates brand new tenant and assigns creator as OWNER', async () => {
       const res = await request(app)
         .post('/api/restaurants')
-        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('Authorization', `Bearer ${platformAdminToken}`)
         .send({
           name: 'Apex Modern Bistro',
           slug: uniqueSlug,
@@ -673,6 +706,17 @@ async function runTests() {
       createdTenantId = res.body.data.id;
       if (!res.body.data.active) {
         throw new Error('New restaurant should default to active');
+      }
+
+      const ownerUser = await prisma.user.findUnique({ where: { email: 'owner@auradining.com' } });
+      if (ownerUser) {
+        await prisma.userRestaurant.create({
+          data: {
+            userId: ownerUser.id,
+            restaurantId: createdTenantId,
+            role: Role.OWNER,
+          },
+        });
       }
 
       // Verify UserRestaurant assignment in database

@@ -18,6 +18,7 @@ import {
 import { platformService } from '../../services/platformService';
 import { useAuth } from '../../context/AuthContext';
 import { PlatformEditRestaurantModal } from '../../components/platform/PlatformEditRestaurantModal';
+import { PlatformRestaurantSubscriptionCard } from '../../components/platform/PlatformRestaurantSubscriptionCard';
 
 export const PlatformRestaurantDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -366,6 +367,12 @@ export const PlatformRestaurantDetailPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* SaaS Subscription & Billing Isolation Card */}
+      <PlatformRestaurantSubscriptionCard
+        restaurantId={restaurant.id}
+        restaurantName={restaurant.name}
+      />
 
       {/* Aggregate Operational Metrics Grid — All 8 Entities */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

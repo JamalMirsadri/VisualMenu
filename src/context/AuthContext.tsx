@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { authService } from '../services/authService';
 import { platformService } from '../services/platformService';
+import { subscriptionService, type SubscriptionStatus } from '../services/subscriptionService';
 import type { AuthUser, UserRestaurantAssignment, UserRole, PlatformRole } from '../services/authService';
 
 interface AuthContextType {
@@ -14,6 +15,10 @@ interface AuthContextType {
   restaurants: UserRestaurantAssignment[];
   permissions: string[];
   hasPermission: (permission: string) => boolean;
+  subscriptionStatus: SubscriptionStatus | null;
+  subscriptionPlan: string | null;
+  subscriptionDaysRemaining: number | null;
+  refreshSubscription: () => Promise<void>;
   isAuthenticated: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<{ user: AuthUser; restaurants: UserRestaurantAssignment[] }>;
@@ -41,6 +46,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   });
   const [loading, setLoading] = useState(true);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
+  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
+  const [subscriptionDaysRemaining, setSubscriptionDaysRemaining] = useState<number | null>(null);
 
   const initAuth = useCallback(async () => {
     const token = authService.getToken();
@@ -85,10 +93,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setRestaurants(data.restaurants);
       const currentActive = data.restaurants.find(r => r.id === activeRestaurant?.id) || data.restaurants[0] || null;
       setActiveRestaurantState(currentActive);
+      if (currentActive?.id) {
+        await refreshSubscriptionFor(currentActive.id);
+      }
     } catch (err) {
       console.error('Failed to refresh profile:', err);
     }
   };
+
+  const refreshSubscriptionFor = async (restaurantId: string) => {
+    try {
+      const sub = await subscriptionService.getSubscription(restaurantId);
+      setSubscriptionStatus(sub.status);
+      setSubscriptionPlan(sub.plan?.name || null);
+      setSubscriptionDaysRemaining(sub.daysRemaining ?? null);
+    } catch (err: any) {
+      if (err.errorCode === 'SUBSCRIPTION_REQUIRED' || err.status === 402) {
+        setSubscriptionStatus('EXPIRED');
+      } else {
+        setSubscriptionStatus(null);
+      }
+      setSubscriptionPlan(null);
+      setSubscriptionDaysRemaining(null);
+    }
+  };
+
+  const refreshSubscription = useCallback(async () => {
+    const target = platformViewingRestaurant || activeRestaurant;
+    if (target?.id) {
+      await refreshSubscriptionFor(target.id);
+    }
+  }, [platformViewingRestaurant, activeRestaurant]);
+
+  useEffect(() => {
+    const target = platformViewingRestaurant || activeRestaurant;
+    if (target?.id) {
+      refreshSubscriptionFor(target.id);
+    }
+  }, [platformViewingRestaurant?.id, activeRestaurant?.id]);
 
   const login = async (email: string, password: string) => {
     const res = await authService.login(email, password);
@@ -186,6 +228,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         restaurants,
         permissions,
         hasPermission,
+        subscriptionStatus,
+        subscriptionPlan,
+        subscriptionDaysRemaining,
+        refreshSubscription,
         isAuthenticated: Boolean(user && authService.getToken()),
         loading,
         login,

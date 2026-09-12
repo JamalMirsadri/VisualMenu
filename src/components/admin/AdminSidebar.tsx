@@ -19,6 +19,7 @@ import {
   CreditCard,
   Banknote,
   UserCheck,
+  Bell,
 } from 'lucide-react';
 import type { Restaurant } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -54,6 +55,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { to: '/admin/menu-preview', label: 'Menu Preview', icon: Eye, permission: 'VIEW_MENU' },
     { to: '/admin/qr', label: 'QR Codes', icon: QrCode, permission: 'VIEW_QR_CODES' },
     { to: '/admin/staff', label: 'Staff & Roles', icon: Users, permission: 'VIEW_STAFF' },
+    { to: '/admin/notifications', label: 'Notifications', icon: Bell },
+    ...(role === 'OWNER' ? [{ to: '/admin/subscription', label: 'Subscription', icon: CreditCard }] : []),
     { to: '/admin/restaurant', label: 'Restaurant Settings', icon: Settings, permission: 'MANAGE_RESTAURANT_SETTINGS' },
   ];
 

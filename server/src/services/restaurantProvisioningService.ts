@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { AuditAction, PlatformRole, ProvisioningStatus, Role } from '@prisma/client';
+import { AuditAction, PlatformRole, ProvisioningStatus, Role, SubscriptionStatus } from '@prisma/client';
 import { prisma } from '../prisma';
 import { AuditService } from './auditService';
 
@@ -207,6 +207,44 @@ export class RestaurantProvisioningService {
           showIngredients: true,
         },
       });
+
+      // 4b. Initialize Tenant Subscription (PENDING until payment)
+      const defaultPlan = await tx.subscriptionPlan.findFirst({
+        where: { active: true },
+        orderBy: { price: 'asc' },
+      });
+
+      if (defaultPlan) {
+        const now = new Date();
+        const trialDays = defaultPlan.trialDays || 0;
+        let trialEndsAt: Date | null = null;
+        let currentPeriodEnd: Date;
+        let initialStatus: SubscriptionStatus = SubscriptionStatus.PENDING;
+
+        if (trialDays > 0) {
+          trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
+          currentPeriodEnd = trialEndsAt;
+          initialStatus = SubscriptionStatus.ACTIVE;
+        } else {
+          currentPeriodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        }
+
+        await tx.subscription.create({
+          data: {
+            restaurantId: restaurant.id,
+            planId: defaultPlan.id,
+            status: initialStatus,
+            startsAt: now,
+            currentPeriodStart: now,
+            currentPeriodEnd,
+            trialEndsAt,
+            autoRenew: true,
+            provider: 'MOCK',
+            agreedPrice: defaultPlan.price,
+            agreedCurrency: defaultPlan.currency,
+          },
+        });
+      }
 
       // 5. Generate secure random invitation token and store hash
       const rawToken = crypto.randomBytes(32).toString('hex');

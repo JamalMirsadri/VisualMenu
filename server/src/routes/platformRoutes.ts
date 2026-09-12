@@ -1,8 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { PlatformRole, AuditAction } from '@prisma/client';
 import multer from 'multer';
+import { prisma } from '../prisma';
 import { PlatformService } from '../services/platformService';
 import { RestaurantProvisioningService } from '../services/restaurantProvisioningService';
+import { SubscriptionService } from '../services/subscription/subscriptionService';
+import { PlatformMessageService } from '../services/platformMessageService';
 import { requirePlatformRole } from '../middleware/authMiddleware';
 import { validateUuidParams } from '../middleware/validation';
 import { getStorageProvider } from '../services/storageProvider';
@@ -693,3 +696,490 @@ platformRouter.put(
     }
   }
 );
+
+/**
+ * =============================================================================
+ * PLATFORM SAAS SUBSCRIPTION MANAGEMENT
+ * =============================================================================
+ */
+
+/**
+ * GET /api/platform/restaurants/:id/subscription
+ * Inspect restaurant subscription, plan, billing history, and lifecycle events
+ */
+platformRouter.get(
+  '/restaurants/:id/subscription',
+  validateUuidParams(['id']),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const restaurantId = req.params.id;
+      const status = await SubscriptionService.getSubscriptionStatus(restaurantId);
+
+      if (!status) {
+        res.status(404).json({
+          success: false,
+          errorCode: 'SUBSCRIPTION_NOT_FOUND',
+          message: 'No subscription found for this restaurant.',
+        });
+        return;
+      }
+
+      const [payments, invoices, events] = await Promise.all([
+        prisma.subscriptionPayment.findMany({
+          where: { subscriptionId: status.id },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.subscriptionInvoice.findMany({
+          where: { subscriptionId: status.id },
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.subscriptionEvent.findMany({
+          where: { subscriptionId: status.id },
+          orderBy: { createdAt: 'desc' },
+          include: {
+            actor: { select: { id: true, name: true, email: true } },
+          },
+        }),
+      ]);
+
+      res.json({
+        success: true,
+        data: {
+          ...status,
+          payments,
+          invoices,
+          events,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/platform/restaurants/:id/subscription/activate
+ * Platform Admin manually activates subscription
+ */
+platformRouter.post(
+  '/restaurants/:id/subscription/activate',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sub = await prisma.subscription.findFirst({
+        where: { restaurantId: req.params.id },
+      });
+
+      if (!sub) {
+        res.status(404).json({ success: false, error: 'Subscription not found' });
+        return;
+      }
+
+      const updated = await SubscriptionService.activateSubscription(
+        sub.id,
+        req.user!.id,
+        req.body.reason || 'Manual activation by Platform Admin'
+      );
+      res.json({ success: true, data: updated });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/platform/restaurants/:id/subscription/suspend
+ * Platform Admin suspends subscription
+ */
+platformRouter.post(
+  '/restaurants/:id/subscription/suspend',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sub = await prisma.subscription.findFirst({
+        where: { restaurantId: req.params.id },
+      });
+
+      if (!sub) {
+        res.status(404).json({ success: false, error: 'Subscription not found' });
+        return;
+      }
+
+      const updated = await SubscriptionService.suspendSubscription(
+        sub.id,
+        req.body.reason || 'Manual suspension by Platform Admin',
+        req.user!.id
+      );
+      res.json({ success: true, data: updated });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/platform/restaurants/:id/subscription/restore
+ * Platform Admin restores subscription
+ */
+platformRouter.post(
+  '/restaurants/:id/subscription/restore',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sub = await prisma.subscription.findFirst({
+        where: { restaurantId: req.params.id },
+      });
+
+      if (!sub) {
+        res.status(404).json({ success: false, error: 'Subscription not found' });
+        return;
+      }
+
+      const updated = await SubscriptionService.restoreSubscription(
+        sub.id,
+        req.user!.id,
+        req.body.reason || 'Manual restoration by Platform Admin'
+      );
+      res.json({ success: true, data: updated });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/platform/restaurants/:id/subscription/extend
+ * Platform Admin grants manual extension (+days)
+ */
+platformRouter.post(
+  '/restaurants/:id/subscription/extend',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const days = Number(req.body.days);
+      const reason = req.body.reason || `Platform Admin extension (+${days} days)`;
+
+      const sub = await prisma.subscription.findFirst({
+        where: { restaurantId: req.params.id },
+      });
+
+      if (!sub) {
+        res.status(404).json({ success: false, error: 'Subscription not found' });
+        return;
+      }
+
+      const updated = await SubscriptionService.extendSubscription({
+        subscriptionId: sub.id,
+        days,
+        reason,
+        actorId: req.user!.id,
+      });
+
+      res.json({ success: true, data: updated });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/platform/restaurants/:id/subscription/change-plan
+ * Platform Admin changes subscription plan
+ */
+platformRouter.post(
+  '/restaurants/:id/subscription/change-plan',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const sub = await prisma.subscription.findFirst({
+        where: { restaurantId: req.params.id },
+      });
+
+      if (!sub) {
+        res.status(404).json({ success: false, error: 'Subscription not found' });
+        return;
+      }
+
+      const updated = await SubscriptionService.changePlan(
+        sub.id,
+        req.body.newPlanId,
+        req.user!.id,
+        req.body.reason
+      );
+
+      res.json({ success: true, data: updated });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/platform/subscriptions/plans
+ * List all subscription plans for platform administration
+ */
+platformRouter.get('/subscriptions/plans', async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const plans = await prisma.subscriptionPlan.findMany({
+      orderBy: { price: 'asc' },
+    });
+    res.json({ success: true, data: plans });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/platform/subscriptions/plans
+ * Create a new SaaS subscription plan
+ */
+platformRouter.post(
+  '/subscriptions/plans',
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { code, name, description, price, currency, billingInterval, intervalCount, trialDays, gracePeriodDays } = req.body;
+      const plan = await prisma.subscriptionPlan.create({
+        data: {
+          code: code.toUpperCase().trim(),
+          name: name.trim(),
+          description,
+          price,
+          currency: currency || 'EUR',
+          billingInterval: billingInterval || 'MONTHLY',
+          intervalCount: intervalCount || 1,
+          trialDays: trialDays !== undefined ? trialDays : null,
+          gracePeriodDays: gracePeriodDays !== undefined ? gracePeriodDays : 7,
+          active: true,
+        },
+      });
+      res.status(201).json({ success: true, data: plan });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * PUT /api/platform/subscriptions/plans/:id
+ * Update plan metadata (name, description, future price)
+ */
+platformRouter.put(
+  '/subscriptions/plans/:id',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { name, description, price, gracePeriodDays, trialDays } = req.body;
+      const plan = await prisma.subscriptionPlan.update({
+        where: { id: req.params.id },
+        data: {
+          ...(name ? { name: name.trim() } : {}),
+          ...(description !== undefined ? { description } : {}),
+          ...(price !== undefined ? { price } : {}),
+          ...(gracePeriodDays !== undefined ? { gracePeriodDays } : {}),
+          ...(trialDays !== undefined ? { trialDays } : {}),
+        },
+      });
+      res.json({ success: true, data: plan });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/platform/subscriptions/plans/:id/toggle
+ * Toggle plan active status
+ */
+platformRouter.post(
+  '/subscriptions/plans/:id/toggle',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const plan = await prisma.subscriptionPlan.findUnique({
+        where: { id: req.params.id },
+      });
+      if (!plan) {
+        res.status(404).json({ success: false, error: 'Plan not found' });
+        return;
+      }
+      const updated = await prisma.subscriptionPlan.update({
+        where: { id: req.params.id },
+        data: { active: !plan.active },
+      });
+      res.json({ success: true, data: updated });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// =============================================================================
+// PLATFORM MESSAGING & BROADCASTS (PHASE 13B)
+// =============================================================================
+
+/**
+ * GET /api/platform/messages
+ * List messages with filters, stats, pagination
+ */
+platformRouter.get('/messages', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { status, targetType, priority, search, page, limit } = req.query;
+    const result = await PlatformMessageService.getPlatformMessages({
+      status: status as any,
+      targetType: targetType as any,
+      priority: priority as any,
+      search: typeof search === 'string' ? search : undefined,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/platform/messages
+ * Compose and send or schedule a message
+ */
+platformRouter.post(
+  '/messages',
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const {
+        title,
+        body,
+        targetType,
+        targetRestaurantIds,
+        filterStatus,
+        filterActiveOnly,
+        priority,
+        pinned,
+        requiresAcknowledgement,
+        scheduledAt,
+        expiresAt,
+        confirmAll,
+        isDraft,
+      } = req.body;
+
+      if (!title || typeof title !== 'string' || !title.trim()) {
+        res.status(400).json({ success: false, error: 'Title is required' });
+        return;
+      }
+
+      if (!body || typeof body !== 'string' || !body.trim()) {
+        res.status(400).json({ success: false, error: 'Message body is required' });
+        return;
+      }
+
+      if (!targetType) {
+        res.status(400).json({ success: false, error: 'Target type is required' });
+        return;
+      }
+
+      // Explicit confirmation check for ALL_RESTAURANTS broadcasts
+      if (targetType === 'ALL_RESTAURANTS' && !isDraft && confirmAll !== true) {
+        res.status(400).json({
+          success: false,
+          errorCode: 'CONFIRMATION_REQUIRED',
+          error: 'Explicit confirmation required to broadcast to all restaurants.',
+        });
+        return;
+      }
+
+      const message = await PlatformMessageService.createMessage(
+        {
+          title: title.trim(),
+          body: body.trim(),
+          targetType,
+          targetRestaurantIds,
+          filterStatus,
+          filterActiveOnly,
+          priority,
+          pinned,
+          requiresAcknowledgement,
+          scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
+          expiresAt: expiresAt ? new Date(expiresAt) : undefined,
+          isDraft,
+          confirmAll,
+        },
+        req.user!.id
+      );
+
+      res.status(201).json({ success: true, data: message });
+    } catch (err: any) {
+      if (err.message && (err.message.includes('CONFIRMATION_REQUIRED') || err.message.includes('confirmation'))) {
+        res.status(400).json({ success: false, errorCode: 'CONFIRMATION_REQUIRED', error: err.message });
+        return;
+      }
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/platform/messages/:id
+ * Message details with delivery, read and acknowledgement stats + recipient breakdown
+ */
+platformRouter.get(
+  '/messages/:id',
+  validateUuidParams(['id']),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const details = await PlatformMessageService.getMessageDetails(req.params.id);
+      if (!details) {
+        res.status(404).json({ success: false, error: 'Message not found' });
+        return;
+      }
+      res.json({ success: true, data: details });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/platform/messages/:id/cancel
+ * Cancel a scheduled message
+ */
+platformRouter.post(
+  '/messages/:id/cancel',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const cancelled = await PlatformMessageService.cancelScheduledMessage(req.params.id, req.user!.id);
+      res.json({ success: true, data: cancelled });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  }
+);
+
+/**
+ * PATCH /api/platform/messages/:id
+ * Edit a draft or already-sent message (with non-destructive revision history)
+ */
+platformRouter.patch(
+  '/messages/:id',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const updated = await PlatformMessageService.editMessage(req.params.id, req.user!.id, req.body);
+      res.json({ success: true, data: updated });
+    } catch (err: any) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  }
+);
+

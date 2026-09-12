@@ -1,4 +1,4 @@
-import { PrismaClient, MediaType, QrTargetType, AuditAction, Role, PlatformRole } from '@prisma/client';
+import { PrismaClient, MediaType, QrTargetType, AuditAction, Role, PlatformRole, BillingInterval, SubscriptionStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -43,6 +43,129 @@ async function main() {
   });
 
   console.log(`✓ Restaurant: ${restaurant.name} (${restaurant.id})`);
+
+  // 1b. Seed SaaS Subscription Plans
+  const plansData = [
+    {
+      code: 'STARTER',
+      name: 'Starter Plan',
+      description: 'Ideal for cafes and intimate dining establishments.',
+      price: 29.0,
+      currency: 'EUR',
+      billingInterval: BillingInterval.MONTHLY,
+      intervalCount: 1,
+      trialDays: 14,
+      gracePeriodDays: 7,
+      active: true,
+    },
+    {
+      code: 'PROFESSIONAL',
+      name: 'Professional Plan',
+      description: 'Full feature suite for fine dining restaurants and bistros.',
+      price: 49.0,
+      currency: 'EUR',
+      billingInterval: BillingInterval.MONTHLY,
+      intervalCount: 1,
+      trialDays: 14,
+      gracePeriodDays: 7,
+      active: true,
+    },
+    {
+      code: 'ENTERPRISE',
+      name: 'Enterprise Plan',
+      description: 'High-volume culinary operations, multiple areas, and dedicated support.',
+      price: 99.0,
+      currency: 'EUR',
+      billingInterval: BillingInterval.MONTHLY,
+      intervalCount: 1,
+      trialDays: 14,
+      gracePeriodDays: 7,
+      active: true,
+    },
+    {
+      code: 'STARTER_YEARLY',
+      name: 'Starter Plan (Yearly)',
+      description: 'Annual starter subscription with 2 months free.',
+      price: 290.0,
+      currency: 'EUR',
+      billingInterval: BillingInterval.YEARLY,
+      intervalCount: 1,
+      trialDays: 14,
+      gracePeriodDays: 7,
+      active: true,
+    },
+    {
+      code: 'PROFESSIONAL_YEARLY',
+      name: 'Professional Plan (Yearly)',
+      description: 'Annual professional subscription with 2 months free.',
+      price: 490.0,
+      currency: 'EUR',
+      billingInterval: BillingInterval.YEARLY,
+      intervalCount: 1,
+      trialDays: 14,
+      gracePeriodDays: 7,
+      active: true,
+    },
+    {
+      code: 'ENTERPRISE_YEARLY',
+      name: 'Enterprise Plan (Yearly)',
+      description: 'Annual enterprise subscription with 2 months free.',
+      price: 990.0,
+      currency: 'EUR',
+      billingInterval: BillingInterval.YEARLY,
+      intervalCount: 1,
+      trialDays: 14,
+      gracePeriodDays: 7,
+      active: true,
+    },
+  ];
+
+  for (const p of plansData) {
+    await prisma.subscriptionPlan.upsert({
+      where: { code: p.code },
+      update: p,
+      create: p,
+    });
+  }
+  console.log(`✓ ${plansData.length} SaaS Subscription Plans seeded`);
+
+  // 1c. Ensure Demo Restaurant has an ACTIVE subscription
+  const proPlan = await prisma.subscriptionPlan.findUnique({ where: { code: 'PROFESSIONAL' } });
+  if (proPlan) {
+    const existingSub = await prisma.subscription.findFirst({
+      where: { restaurantId: restaurant.id },
+    });
+
+    const now = new Date();
+    const periodEnd = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year active
+
+    if (!existingSub) {
+      await prisma.subscription.create({
+        data: {
+          restaurantId: restaurant.id,
+          planId: proPlan.id,
+          status: SubscriptionStatus.ACTIVE,
+          startsAt: now,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          autoRenew: true,
+          provider: 'LEGACY_SEED',
+          agreedPrice: proPlan.price,
+          agreedCurrency: proPlan.currency,
+        },
+      });
+      console.log('✓ Demo restaurant subscription seeded (ACTIVE)');
+    } else {
+      await prisma.subscription.update({
+        where: { id: existingSub.id },
+        data: {
+          status: SubscriptionStatus.ACTIVE,
+          currentPeriodEnd: periodEnd,
+        },
+      });
+      console.log('✓ Demo restaurant subscription refreshed (ACTIVE)');
+    }
+  }
 
   // 2. Seed Restaurant Settings (Upsert by unique restaurantId)
   await prisma.restaurantSettings.upsert({

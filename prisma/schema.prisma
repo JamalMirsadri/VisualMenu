@@ -55,6 +55,82 @@ enum ProvisioningStatus {
   DEACTIVATED
 }
 
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  GRACE_PERIOD
+  EXPIRED
+  CANCELLED
+  SUSPENDED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionPaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  SUBSCRIPTION_30_DAYS
+  SUBSCRIPTION_14_DAYS
+  SUBSCRIPTION_7_DAYS
+  SUBSCRIPTION_3_DAYS
+  SUBSCRIPTION_1_DAY
+  SUBSCRIPTION_EXPIRED
+  SUBSCRIPTION_RENEWED
+  SUBSCRIPTION_PAYMENT_FAILED
+  SUBSCRIPTION_ACTIVATED
+  SUBSCRIPTION_SUSPENDED
+  SUBSCRIPTION_RESTORED
+  SYSTEM
+  PLATFORM_MESSAGE
+  SYSTEM_ALERT
+  SECURITY_ALERT
+  GENERAL_ANNOUNCEMENT
+}
+
+enum NotificationSource {
+  SYSTEM
+  PLATFORM
+  SECURITY
+  SUBSCRIPTION
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum PlatformMessageTargetType {
+  RESTAURANT
+  MULTIPLE_RESTAURANTS
+  ALL_RESTAURANTS
+}
+
+enum PlatformMessageStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  CANCELLED
+  EXPIRED
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
 enum StaffStatus {
   ACTIVE
   DISABLED
@@ -90,6 +166,26 @@ enum AuditAction {
   STAFF_PERMISSION_GRANT
   STAFF_PERMISSION_REVOKE
   STAFF_ROLE_CHANGE
+  SUBSCRIPTION_CREATED
+  SUBSCRIPTION_ACTIVATED
+  SUBSCRIPTION_RENEWED
+  SUBSCRIPTION_PLAN_CHANGED
+  SUBSCRIPTION_PAYMENT_SUCCESS
+  SUBSCRIPTION_PAYMENT_FAILED
+  SUBSCRIPTION_GRACE_STARTED
+  SUBSCRIPTION_EXPIRED
+  SUBSCRIPTION_CANCELLED
+  SUBSCRIPTION_SUSPENDED
+  SUBSCRIPTION_REACTIVATED
+  SUBSCRIPTION_EXTENDED
+  PLATFORM_MESSAGE_CREATED
+  PLATFORM_MESSAGE_SCHEDULED
+  PLATFORM_MESSAGE_SENT
+  PLATFORM_MESSAGE_CANCELLED
+  PLATFORM_MESSAGE_EXPIRED
+  PLATFORM_MESSAGE_EDITED
+  NOTIFICATION_READ
+  NOTIFICATION_ACKNOWLEDGED
 }
 
 enum PaymentMethod {
@@ -180,6 +276,9 @@ model Restaurant {
   auditLogs       AuditLog[]
   ownerInvitations OwnerInvitation[]
   staffInvitations StaffInvitation[]
+  subscriptions    Subscription[]
+  notifications    Notification[]
+  messageRecipients PlatformMessageRecipient[]
 
   @@index([name])
   @@index([active])
@@ -630,7 +729,14 @@ model User {
   changedStatusHistories OrderStatusHistory[]
   paymentsAccepted       Payment[]            @relation("StaffReceivedPayments")
   createdInvitations     OwnerInvitation[]    @relation("CreatedOwnerInvitations")
+  subscriptionEvents     SubscriptionEvent[]
+  notifications          Notification[]
+  createdNotifications   Notification[]       @relation("CreatedNotifications")
+  acknowledgedNotifications Notification[]   @relation("AcknowledgedNotifications")
+  sentPlatformMessages   PlatformMessage[]    @relation("SentPlatformMessages")
+  editedMessageRevisions PlatformMessageRevision[] @relation("EditedMessageRevisions")
   createdStaffInvitations StaffInvitation[]   @relation("CreatedStaffInvitations")
+  acknowledgedRecipients PlatformMessageRecipient[] @relation("RecipientAcknowledgedBy")
 
   @@index([platformRole])
   @@map("users")
@@ -799,3 +905,260 @@ model PlatformSettings {
   @@map("platform_settings")
 }
 
+// -----------------------------------------------------------------------------
+// SUBSCRIPTION BILLING DOMAIN (Phase 13A)
+// Completely separate from restaurant order payment lifecycle.
+// -----------------------------------------------------------------------------
+
+model SubscriptionPlan {
+  id               String          @id @default(uuid()) @db.Uuid
+  code             String          @unique
+  name             String
+  description      String?         @db.Text
+  price            Decimal         @db.Decimal(10, 2)
+  currency         String          @default("EUR")
+  billingInterval  BillingInterval @default(MONTHLY) @map("billing_interval")
+  intervalCount    Int             @default(1) @map("interval_count")
+  trialDays        Int?            @map("trial_days")
+  gracePeriodDays  Int             @default(7) @map("grace_period_days")
+  active           Boolean         @default(true)
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  subscriptions    Subscription[]
+
+  @@index([active])
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id                       String             @id @default(uuid()) @db.Uuid
+  restaurantId             String             @map("restaurant_id") @db.Uuid
+  planId                   String             @map("plan_id") @db.Uuid
+  status                   SubscriptionStatus @default(PENDING)
+  startsAt                 DateTime           @map("starts_at")
+  currentPeriodStart       DateTime           @map("current_period_start")
+  currentPeriodEnd         DateTime           @map("current_period_end")
+  trialEndsAt              DateTime?          @map("trial_ends_at")
+  graceEndsAt              DateTime?          @map("grace_ends_at")
+  cancelledAt              DateTime?          @map("cancelled_at")
+  endedAt                  DateTime?          @map("ended_at")
+  autoRenew                Boolean            @default(true) @map("auto_renew")
+  provider                 String             @default("MOCK")
+  providerCustomerId       String?            @map("provider_customer_id")
+  providerSubscriptionId   String?            @map("provider_subscription_id")
+  agreedPrice              Decimal            @db.Decimal(10, 2) @map("agreed_price")
+  agreedCurrency           String             @default("EUR") @map("agreed_currency")
+  createdAt                DateTime           @default(now()) @map("created_at")
+  updatedAt                DateTime           @updatedAt @map("updated_at")
+
+  restaurant               Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  plan                     SubscriptionPlan   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments                 SubscriptionPayment[]
+  invoices                 SubscriptionInvoice[]
+  events                   SubscriptionEvent[]
+  reminderLogs             SubscriptionReminderLog[]
+
+  @@index([restaurantId])
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@index([planId])
+  @@index([providerSubscriptionId])
+  @@index([restaurantId, status])
+  @@map("subscriptions")
+}
+
+model SubscriptionPayment {
+  id                     String                    @id @default(uuid()) @db.Uuid
+  subscriptionId         String                    @map("subscription_id") @db.Uuid
+  amount                 Decimal                   @db.Decimal(10, 2)
+  currency               String                    @default("EUR")
+  status                 SubscriptionPaymentStatus @default(PENDING)
+  provider               String
+  providerTransactionId  String?                   @map("provider_transaction_id")
+  idempotencyKey         String?                   @unique @map("idempotency_key")
+  paidAt                 DateTime?                 @map("paid_at")
+  failureReason          String?                   @map("failure_reason") @db.Text
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  updatedAt              DateTime                  @updatedAt @map("updated_at")
+
+  subscription           Subscription              @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([providerTransactionId])
+  @@map("subscription_payments")
+}
+
+model SubscriptionInvoice {
+  id                String             @id @default(uuid()) @db.Uuid
+  subscriptionId    String             @map("subscription_id") @db.Uuid
+  invoiceNumber     String             @unique @map("invoice_number")
+  periodStart       DateTime           @map("period_start")
+  periodEnd         DateTime           @map("period_end")
+  subtotal          Decimal            @db.Decimal(10, 2)
+  tax               Decimal            @default(0.00) @db.Decimal(10, 2)
+  total             Decimal            @db.Decimal(10, 2)
+  currency          String             @default("EUR")
+  status            String             @default("DRAFT")
+  issuedAt          DateTime?          @map("issued_at")
+  paidAt            DateTime?          @map("paid_at")
+  dueAt             DateTime?          @map("due_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  subscription      Subscription       @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([invoiceNumber])
+  @@map("subscription_invoices")
+}
+
+model SubscriptionEvent {
+  id               String       @id @default(uuid()) @db.Uuid
+  subscriptionId   String       @map("subscription_id") @db.Uuid
+  eventType        String       @map("event_type")
+  fromStatus       String?      @map("from_status")
+  toStatus         String?      @map("to_status")
+  actorId          String?      @map("actor_id") @db.Uuid
+  reason           String?      @db.Text
+  metadata         Json?
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  subscription     Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  actor            User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([subscriptionId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("subscription_events")
+}
+
+model Notification {
+  id                   String               @id @default(uuid()) @db.Uuid
+  restaurantId         String               @map("restaurant_id") @db.Uuid
+  userId               String?              @map("user_id") @db.Uuid
+  type                 NotificationType
+  source               NotificationSource   @default(SYSTEM)
+  priority             NotificationPriority @default(NORMAL)
+  title                String
+  message              String               @db.Text
+  severity             NotificationSeverity @default(INFO)
+  readAt               DateTime?            @map("read_at")
+  acknowledgedAt       DateTime?            @map("acknowledged_at")
+  acknowledgedByUserId String?              @map("acknowledged_by_user_id") @db.Uuid
+  pinned               Boolean              @default(false)
+  expiresAt            DateTime?            @map("expires_at")
+  archivedAt           DateTime?            @map("archived_at")
+  createdByUserId      String?              @map("created_by_user_id") @db.Uuid
+  platformMessageId    String?              @map("platform_message_id") @db.Uuid
+  metadata             Json?
+  createdAt            DateTime             @default(now()) @map("created_at")
+
+  restaurant           Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  user                 User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdByUser        User?                @relation("CreatedNotifications", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  acknowledgedByUser   User?                @relation("AcknowledgedNotifications", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+  platformMessage      PlatformMessage?     @relation(fields: [platformMessageId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId])
+  @@index([userId])
+  @@index([type])
+  @@index([source])
+  @@index([priority])
+  @@index([readAt])
+  @@index([platformMessageId])
+  @@index([restaurantId, userId, readAt])
+  @@map("notifications")
+}
+
+model PlatformMessage {
+  id              String                    @id @default(uuid()) @db.Uuid
+  senderUserId    String?                   @map("sender_user_id") @db.Uuid
+  title           String
+  message         String                    @db.Text
+  priority        NotificationPriority      @default(NORMAL)
+  targetType      PlatformMessageTargetType @map("target_type")
+  status          PlatformMessageStatus     @default(SENT)
+  scheduledAt     DateTime?                 @map("scheduled_at")
+  expiresAt       DateTime?                 @map("expires_at")
+  sentAt          DateTime?                 @map("sent_at")
+  metadata        Json?
+  createdAt       DateTime                  @default(now()) @map("created_at")
+  updatedAt       DateTime                  @updatedAt @map("updated_at")
+
+  senderUser      User?                     @relation("SentPlatformMessages", fields: [senderUserId], references: [id], onDelete: SetNull)
+  recipients      PlatformMessageRecipient[]
+  revisions       PlatformMessageRevision[]
+  notifications   Notification[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([scheduledAt])
+  @@index([createdAt])
+  @@map("platform_messages")
+}
+
+model PlatformMessageRecipient {
+  id                   String           @id @default(uuid()) @db.Uuid
+  messageId            String           @map("message_id") @db.Uuid
+  restaurantId         String           @map("restaurant_id") @db.Uuid
+  deliveredAt          DateTime?        @map("delivered_at")
+  readAt               DateTime?        @map("read_at")
+  acknowledgedAt       DateTime?        @map("acknowledged_at")
+  acknowledgedByUserId String?          @map("acknowledged_by_user_id") @db.Uuid
+  createdAt            DateTime         @default(now()) @map("created_at")
+
+  message              PlatformMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  restaurant           Restaurant       @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  acknowledgedByUser   User?            @relation("RecipientAcknowledgedBy", fields: [acknowledgedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([messageId, restaurantId])
+  @@index([restaurantId])
+  @@index([messageId])
+  @@map("platform_message_recipients")
+}
+
+model PlatformMessageRevision {
+  id              String           @id @default(uuid()) @db.Uuid
+  messageId       String           @map("message_id") @db.Uuid
+  title           String
+  content         String           @db.Text
+  editedByUserId  String?          @map("edited_by_user_id") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  message         PlatformMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  editedByUser    User?            @relation("EditedMessageRevisions", fields: [editedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([messageId])
+  @@map("platform_message_revisions")
+}
+
+model SubscriptionWebhookEvent {
+  id              String    @id @default(uuid()) @db.Uuid
+  provider        String
+  providerEventId String    @map("provider_event_id")
+  eventType       String    @map("event_type")
+  payload         Json
+  processed       Boolean   @default(false)
+  processedAt     DateTime? @map("processed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@unique([provider, providerEventId])
+  @@index([processed])
+  @@map("subscription_webhook_events")
+}
+
+model SubscriptionReminderLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  subscriptionId   String   @map("subscription_id") @db.Uuid
+  eventType        String   @map("event_type")
+  periodEnd        DateTime @map("period_end")
+  sentAt           DateTime @default(now()) @map("sent_at")
+
+  subscription     Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, eventType, periodEnd])
+  @@index([subscriptionId])
+  @@map("subscription_reminder_logs")
+}

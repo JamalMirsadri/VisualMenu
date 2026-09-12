@@ -7,10 +7,11 @@ import { ShieldAlert } from 'lucide-react';
 interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles?: UserRole[];
+  allowExpired?: boolean;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
-  const { isAuthenticated, loading, role } = useAuth();
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles, allowExpired }) => {
+  const { isAuthenticated, loading, role, isPlatformAdmin, isPlatformUser, subscriptionStatus } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -26,6 +27,19 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
   if (!isAuthenticated) {
     return <Navigate to="/admin/login" state={{ from: location }} replace />;
+  }
+
+  // Subscription Gating (Platform operators always bypass)
+  if (!isPlatformAdmin && !isPlatformUser && !allowExpired) {
+    if (subscriptionStatus === 'EXPIRED' || subscriptionStatus === 'SUSPENDED' || subscriptionStatus === 'CANCELLED') {
+      if (location.pathname !== '/admin/subscription-required' && location.pathname !== '/admin/subscription') {
+        return <Navigate to="/admin/subscription-required" replace />;
+      }
+    } else if (subscriptionStatus === 'PENDING') {
+      if (location.pathname !== '/admin/subscription') {
+        return <Navigate to="/admin/subscription" replace />;
+      }
+    }
   }
 
   if (allowedRoles && role && !allowedRoles.includes(role)) {

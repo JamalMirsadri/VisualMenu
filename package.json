@@ -17,6 +17,8 @@
     "test:platform": "tsx server/tests/platformAdmin.test.ts",
     "test:isolation": "tsx server/tests/tenantIsolation.test.ts",
     "test:provisioning": "tsx server/tests/provisioning.test.ts",
+    "test:subscriptions": "tsx server/tests/subscriptions.test.ts",
+    "test:notifications": "tsx server/tests/notifications.test.ts",
     "test:staff": "tsx server/tests/staff.test.ts",
     "test:operations": "tsx server/tests/operations.test.ts",
     "test:operational-access": "tsx server/tests/operational-access.test.ts",

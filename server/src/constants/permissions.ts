@@ -70,6 +70,10 @@ export type PermissionKey =
   // QR
   | 'VIEW_QR_CODES'
   | 'MANAGE_QR_CODES'
+  // NOTIFICATIONS
+  | 'VIEW_NOTIFICATIONS'
+  | 'MARK_NOTIFICATIONS_READ'
+  | 'ACKNOWLEDGE_NOTIFICATIONS'
   // LEGACY ALIASES (Phase 5/9 backward compatibility)
   | 'MANAGE_USERS'
   | 'MANAGE_RESTAURANT'
@@ -421,6 +425,25 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     label: 'Manage QR Codes',
     description: 'Create customized restaurant menu and table QR destinations.',
   },
+  // NOTIFICATIONS
+  {
+    key: 'VIEW_NOTIFICATIONS',
+    group: 'Notifications',
+    label: 'View Notifications',
+    description: 'View tenant-scoped notifications, subscription notices, and platform announcements.',
+  },
+  {
+    key: 'MARK_NOTIFICATIONS_READ',
+    group: 'Notifications',
+    label: 'Mark Notifications Read',
+    description: 'Mark restaurant notifications and alerts as read or unread.',
+  },
+  {
+    key: 'ACKNOWLEDGE_NOTIFICATIONS',
+    group: 'Notifications',
+    label: 'Acknowledge Notifications',
+    description: 'Acknowledge urgent and high-priority platform messages and announcements.',
+  },
 ];
 
 export type RoleTemplate =
@@ -584,6 +607,9 @@ export const ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
     'VIEW_AUDIT_LOGS',
     'VIEW_QR_CODES',
     'MANAGE_QR_CODES',
+    'VIEW_NOTIFICATIONS',
+    'MARK_NOTIFICATIONS_READ',
+    'ACKNOWLEDGE_NOTIFICATIONS',
     // Backward compatibility aliases
     'MANAGE_USERS',
     'MANAGE_RESTAURANT',
@@ -620,6 +646,9 @@ export const ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
     'VIEW_PAYMENT_STATUS',
     'VIEW_REPORTS',
     'VIEW_QR_CODES',
+    'VIEW_NOTIFICATIONS',
+    'MARK_NOTIFICATIONS_READ',
+    'ACKNOWLEDGE_NOTIFICATIONS',
     // Backward compatibility aliases
     'TOGGLE_AVAILABILITY',
   ],
@@ -638,6 +667,7 @@ export const ROLE_PERMISSIONS: Record<Role, PermissionKey[]> = {
     'CONFIRM_CASH_PAYMENT',
     'VIEW_PAYMENT_STATUS',
     'TOGGLE_FOOD_AVAILABILITY',
+    'VIEW_NOTIFICATIONS',
     // Backward compatibility aliases
     'TOGGLE_AVAILABILITY',
   ],

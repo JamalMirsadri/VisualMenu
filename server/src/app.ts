@@ -21,8 +21,11 @@ import { platformRouter } from './routes/platformRoutes';
 import { ownerInvitationRouter } from './routes/ownerInvitationRoutes';
 import { staffRouter } from './routes/staffRoutes';
 import { staffInvitationRouter } from './routes/staffInvitationRoutes';
+import { subscriptionRouter } from './routes/subscriptionRoutes';
+import { notificationRouter } from './routes/notificationRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { authenticateToken } from './middleware/authMiddleware';
+import { requireActiveSubscription } from './middleware/subscriptionMiddleware';
 import { requestLogger } from './middleware/requestLogger';
 
 export const app = express();
@@ -81,16 +84,18 @@ app.use('/api', customerRouter); // Includes public fiscal profile save and prot
 // -----------------------------------------------------------------------------
 // 2. PROTECTED ADMIN & MANAGEMENT ROUTES (Enforced server-side)
 // -----------------------------------------------------------------------------
-app.use('/api/restaurants', authenticateToken, restaurantRouter);
-app.use('/api', authenticateToken, categoryRouter);
-app.use('/api', authenticateToken, foodRouter);
-app.use('/api', authenticateToken, mediaRouter);
-app.use('/api', authenticateToken, settingsRouter);
-app.use('/api', authenticateToken, qrRouter);
-app.use('/api', authenticateToken, tableRouter);
-app.use('/api', authenticateToken, userRouter);
-app.use('/api', authenticateToken, staffRouter);
-app.use('/api', authenticateToken, auditRouter);
+app.use('/api/subscriptions', subscriptionRouter);
+app.use('/api/notifications', notificationRouter);
+app.use('/api/restaurants', authenticateToken, requireActiveSubscription(), restaurantRouter);
+app.use('/api', authenticateToken, requireActiveSubscription(), categoryRouter);
+app.use('/api', authenticateToken, requireActiveSubscription(), foodRouter);
+app.use('/api', authenticateToken, requireActiveSubscription(), mediaRouter);
+app.use('/api', authenticateToken, requireActiveSubscription(), settingsRouter);
+app.use('/api', authenticateToken, requireActiveSubscription(), qrRouter);
+app.use('/api', authenticateToken, requireActiveSubscription(), tableRouter);
+app.use('/api', authenticateToken, requireActiveSubscription(), userRouter);
+app.use('/api', authenticateToken, requireActiveSubscription(), staffRouter);
+app.use('/api', authenticateToken, requireActiveSubscription(), auditRouter);
 app.use('/api/platform', authenticateToken, platformRouter);
 
 // Centralized Error Handling

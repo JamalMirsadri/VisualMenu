@@ -4,6 +4,9 @@ import { ExternalLink, Menu, Sparkles, X, ShieldAlert, ArrowLeft } from 'lucide-
 import { useAdminData } from '../../hooks/useAdminData';
 import { useAuth } from '../../context/AuthContext';
 import { AdminSidebar } from './AdminSidebar';
+import { SubscriptionWarningBanner } from './SubscriptionWarningBanner';
+import { UrgentNotificationBanner } from './UrgentNotificationBanner';
+import { NotificationBell } from './NotificationBell';
 
 export const AdminLayout: React.FC = () => {
   const { restaurant, refresh } = useAdminData();
@@ -112,6 +115,7 @@ export const AdminLayout: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3 shrink-0">
+              <NotificationBell />
               <Link
                 to={`/menu/${restaurant?.slug || 'demo-restaurant'}`}
                 className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-amber-500/10 border border-amber-400/40 text-amber-300 hover:bg-amber-500 hover:text-black transition-all text-xs font-semibold min-h-[36px]"
@@ -123,6 +127,12 @@ export const AdminLayout: React.FC = () => {
               </Link>
             </div>
           </header>
+
+          {/* Subscription Warning Banner */}
+          <SubscriptionWarningBanner />
+
+          {/* Urgent Announcement Banner */}
+          <UrgentNotificationBanner />
 
           {/* Scrollable Page Body (Responsive, No Viewport Horizontal Overflow) */}
           <main className="flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-6 lg:p-8 bg-[#0b0c10]">

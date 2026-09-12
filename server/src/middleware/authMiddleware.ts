@@ -306,7 +306,15 @@ async function resolveRestaurantId(req: Request): Promise<string | null> {
     targetRestaurantId = req.body.restaurantId;
   }
 
-  const candidateId = req.params.id || req.params.foodId || req.params.orderId || req.params.paymentId || req.params.tableId || req.params.customerId || req.params.mediaId || req.params.categoryId;
+  if (!targetRestaurantId && req.query && typeof req.query.restaurantId === 'string') {
+    targetRestaurantId = req.query.restaurantId;
+  }
+
+  if (!targetRestaurantId && req.headers && typeof req.headers['x-restaurant-id'] === 'string') {
+    targetRestaurantId = req.headers['x-restaurant-id'] as string;
+  }
+
+  const candidateId = req.params.id || req.params.foodId || req.params.orderId || req.params.paymentId || req.params.tableId || req.params.customerId || req.params.mediaId || req.params.categoryId || req.params.notificationId;
 
   // Food Item lookup
   if (!targetRestaurantId && (req.baseUrl.includes('/foods') || fullUrl.includes('/foods')) && candidateId) {
@@ -369,6 +377,15 @@ async function resolveRestaurantId(req: Request): Promise<string | null> {
       select: { restaurantId: true },
     });
     if (customer) targetRestaurantId = customer.restaurantId;
+  }
+
+  // Notification lookup
+  if (!targetRestaurantId && (req.baseUrl.includes('/notifications') || fullUrl.includes('/notifications')) && candidateId) {
+    const notif = await prisma.notification.findUnique({
+      where: { id: candidateId },
+      select: { restaurantId: true },
+    });
+    if (notif) targetRestaurantId = notif.restaurantId;
   }
 
   return targetRestaurantId || null;

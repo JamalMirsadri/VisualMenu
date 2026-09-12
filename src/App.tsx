@@ -32,6 +32,11 @@ import { PlatformSettingsPage } from './pages/platform/PlatformSettingsPage';
 import { OwnerOnboardingPage } from './pages/owner/OwnerOnboardingPage';
 import { StaffOnboardingPage } from './pages/staff/StaffOnboardingPage';
 import { AdminStaffPage } from './pages/admin/AdminStaffPage';
+import { AdminSubscriptionPage } from './pages/admin/AdminSubscriptionPage';
+import { AdminNotificationsPage } from './pages/admin/AdminNotificationsPage';
+import { SubscriptionRequiredPage } from './pages/admin/SubscriptionRequiredPage';
+import { PlatformSubscriptionPlansPage } from './pages/platform/PlatformSubscriptionPlansPage';
+import { PlatformMessagesPage } from './pages/platform/PlatformMessagesPage';
 import { PermissionRoute } from './components/common/PermissionRoute';
 
 export const App: React.FC = () => {
@@ -52,6 +57,16 @@ export const App: React.FC = () => {
 
           {/* Admin Login Route */}
           <Route path="/admin/login" element={<AdminLoginPage />} />
+
+          {/* Subscription Required Gate Page */}
+          <Route
+            path="/admin/subscription-required"
+            element={
+              <ProtectedRoute allowExpired={true}>
+                <SubscriptionRequiredPage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Protected Admin Management Panel */}
           <Route
@@ -76,6 +91,8 @@ export const App: React.FC = () => {
             <Route path="menu-preview" element={<PermissionRoute permission="VIEW_MENU"><AdminMenuPreviewPage /></PermissionRoute>} />
             <Route path="staff" element={<PermissionRoute permission="VIEW_STAFF"><AdminStaffPage /></PermissionRoute>} />
             <Route path="users" element={<PermissionRoute permission="VIEW_STAFF"><AdminStaffPage /></PermissionRoute>} />
+            <Route path="subscription" element={<AdminSubscriptionPage />} />
+            <Route path="notifications" element={<AdminNotificationsPage />} />
             <Route path="restaurants" element={<Navigate to="/admin/restaurant" replace />} />
             <Route path="restaurant" element={<PermissionRoute permission="MANAGE_RESTAURANT_SETTINGS"><AdminRestaurantPage /></PermissionRoute>} />
             <Route path="qr" element={<PermissionRoute permission="VIEW_QR_CODES"><AdminQrPage /></PermissionRoute>} />
@@ -94,6 +111,8 @@ export const App: React.FC = () => {
             <Route path="restaurants" element={<PlatformRestaurantsPage />} />
             <Route path="restaurants/create" element={<PlatformCreateRestaurantPage />} />
             <Route path="restaurants/:id" element={<PlatformRestaurantDetailPage />} />
+            <Route path="subscriptions/plans" element={<PlatformSubscriptionPlansPage />} />
+            <Route path="messages" element={<PlatformMessagesPage />} />
             <Route path="users" element={<PlatformUsersPage />} />
             <Route path="audit" element={<PlatformAuditPage />} />
             <Route path="settings" element={<PlatformSettingsPage />} />

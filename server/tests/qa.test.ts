@@ -37,6 +37,7 @@ async function setup() {
     .send({ email: 'owner@auradining.com', password: 'Password123!' });
   if (ownerRes.status !== 200) throw new Error(`Owner login failed: ${ownerRes.status}`);
   ownerToken = ownerRes.body.data.token;
+  const ownerId = ownerRes.body.data.user.id;
 
   // 2. Authenticate Staff
   const staffRes = await request(app)
@@ -44,24 +45,56 @@ async function setup() {
     .send({ email: 'staff@auradining.com', password: 'Password123!' });
   if (staffRes.status !== 200) throw new Error(`Staff login failed: ${staffRes.status}`);
   staffToken = staffRes.body.data.token;
+  const staffId = staffRes.body.data.user.id;
+
+  // 2.1 Authenticate Platform Admin to create test restaurants
+  const adminRes = await request(app)
+    .post('/api/auth/login')
+    .send({ email: 'platformadmin@auramenu.com', password: 'Password123!' });
+  if (adminRes.status !== 200) throw new Error(`Platform Admin login failed: ${adminRes.status}`);
+  const adminToken = adminRes.body.data.token;
 
   // 3. Create Restaurant Alpha
   restaurantAlphaSlug = `qa-alpha-${Date.now()}`;
   const restA = await request(app)
     .post('/api/restaurants')
-    .set('Authorization', `Bearer ${ownerToken}`)
+    .set('Authorization', `Bearer ${adminToken}`)
     .send({ name: 'QA Alpha Dining', slug: restaurantAlphaSlug, currency: 'USD' });
   if (restA.status !== 201) throw new Error(`Rest A creation failed: ${JSON.stringify(restA.body)}`);
   restaurantAlphaId = restA.body.data.id;
+
+  await prisma.userRestaurant.create({
+    data: {
+      userId: ownerId,
+      restaurantId: restaurantAlphaId,
+      role: Role.OWNER,
+    },
+  });
+
+  await prisma.userRestaurant.create({
+    data: {
+      userId: staffId,
+      restaurantId: restaurantAlphaId,
+      role: Role.STAFF,
+    },
+  });
 
   // 4. Create Restaurant Beta
   restaurantBetaSlug = `qa-beta-${Date.now()}`;
   const restB = await request(app)
     .post('/api/restaurants')
-    .set('Authorization', `Bearer ${ownerToken}`)
+    .set('Authorization', `Bearer ${adminToken}`)
     .send({ name: 'QA Beta Bistro', slug: restaurantBetaSlug, currency: 'EUR' });
   if (restB.status !== 201) throw new Error(`Rest B creation failed: ${JSON.stringify(restB.body)}`);
   restaurantBetaId = restB.body.data.id;
+
+  await prisma.userRestaurant.create({
+    data: {
+      userId: ownerId,
+      restaurantId: restaurantBetaId,
+      role: Role.OWNER,
+    },
+  });
 
   // 5. Create category & food in Alpha
   const cat = await request(app)

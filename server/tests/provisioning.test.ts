@@ -55,22 +55,21 @@ async function runProvisioningTests() {
     });
 
     await assert('3. Non-platform user cannot access /api/platform/restaurants (403)', async () => {
-      // Create or log in a standard user without platformRole
-      let regularUser = await prisma.user.findFirst({ where: { platformRole: null } });
-      if (!regularUser) {
-        regularUser = await prisma.user.create({
-          data: {
-            email: `staff-${Date.now()}@auramenu.com`,
-            name: 'Regular Staff',
-            passwordHash: await bcrypt.hash('Password123!', 10),
-            active: true,
-          },
-        });
-      }
+      // Create a dedicated standard user without platformRole
+      const regularEmail = `test-staff-${Date.now()}-${Math.random().toString(36).substring(7)}@auramenu.com`;
+      const regularUser = await prisma.user.create({
+        data: {
+          email: regularEmail,
+          name: 'Regular Staff',
+          passwordHash: await bcrypt.hash('Password123!', 10),
+          active: true,
+        },
+      });
       const loginRes = await request(app).post('/api/auth/login').send({
         email: regularUser.email,
         password: 'Password123!',
       });
+      if (loginRes.status !== 200) throw new Error(`Expected 200, got ${loginRes.status}: ${JSON.stringify(loginRes.body)}`);
       standardUserToken = loginRes.body.data.token;
 
       const res = await request(app)
