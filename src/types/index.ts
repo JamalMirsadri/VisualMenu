@@ -286,22 +286,24 @@ export type TableOperationalState =
 export interface TableOperationalInfo {
   id: string;
   number: string;
-  name: string;
+  name: string | null;
   capacity: number;
   location?: string | null;
   active: boolean;
   state: TableOperationalState;
   activeOrderCount: number;
-  activeOrders: Order[];
-  assignedWaiters: Array<{
+  // The floor endpoint returns a single `activeOrder` summary rather than full
+  // `activeOrders`/`assignedWaiters` arrays, so these are optional to match reality.
+  activeOrders?: Order[];
+  assignedWaiters?: Array<{
     userRestaurantId: string;
     userId: string;
     name: string;
     email: string;
   }>;
   totalUnpaidAmount: number;
-  lastStateChangeAt: string | null;
-  minutesInCurrentState: number;
+  lastStateChangeAt?: string | null;
+  minutesInCurrentState?: number;
 }
 
 export interface FloorSummary {

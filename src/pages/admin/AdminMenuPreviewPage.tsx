@@ -19,6 +19,8 @@ import {
   PanelRightOpen,
 } from 'lucide-react';
 import { useAdminData } from '../../hooks/useAdminData';
+import { RestaurantDataGate } from '../../components/admin/RestaurantDataGate';
+import { ErrorBanner } from '../../components/admin/ErrorBanner';
 import { settingsService } from '../../services/settingsService';
 import { THEME_REGISTRY } from '../../theme/themeConfig';
 import type { ThemeDefinition } from '../../theme/themeConfig';
@@ -29,7 +31,7 @@ import { LuxuryFoodFallback } from '../../components/customer/LuxuryFoodFallback
 import { SinglePlayVideo } from '../../components/customer/SinglePlayVideo';
 
 export const AdminMenuPreviewPage: React.FC = () => {
-  const { restaurant, categories, foods, loading } = useAdminData();
+  const { restaurant, categories, foods, loading, error, refresh } = useAdminData();
 
   const [deviceMode, setDeviceMode] = useState<DeviceMode>('iphone');
   const [activeTab, setActiveTab] = useState<'theme' | 'presentation' | 'toggles' | 'typography'>('theme');
@@ -122,7 +124,19 @@ export const AdminMenuPreviewPage: React.FC = () => {
     );
   };
 
-  if (loading || !restaurant || !previewSettings) {
+  if (loading || !restaurant) {
+    return (
+      <RestaurantDataGate
+        loading={loading}
+        error={error}
+        hasRestaurant={Boolean(restaurant)}
+        loadingLabel="Initializing Live Menu Studio..."
+        onRetry={refresh}
+      />
+    );
+  }
+
+  if (!previewSettings) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-zinc-400">
         <div className="w-10 h-10 rounded-full border-2 border-amber-400/20 border-t-amber-400 animate-spin mb-4" />
@@ -142,6 +156,11 @@ export const AdminMenuPreviewPage: React.FC = () => {
 
   return (
     <div className="h-[calc(100vh-5rem)] flex flex-col overflow-hidden -m-6 bg-zinc-950 select-none">
+      {error && (
+        <div className="shrink-0 px-4 sm:px-6 pt-3">
+          <ErrorBanner message={error} onRetry={refresh} title="Could not load menu data" />
+        </div>
+      )}
       {/* Top Header / Studio Bar */}
       <header className="px-4 sm:px-6 py-2.5 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 shrink-0 z-20">
         {/* Title & Status */}

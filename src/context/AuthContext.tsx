@@ -18,6 +18,7 @@ interface AuthContextType {
   subscriptionStatus: SubscriptionStatus | null;
   subscriptionPlan: string | null;
   subscriptionDaysRemaining: number | null;
+  subscriptionLoading: boolean;
   refreshSubscription: () => Promise<void>;
   isAuthenticated: boolean;
   loading: boolean;
@@ -30,6 +31,23 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+/**
+ * Deterministically resolves the active restaurant from the authenticated
+ * membership list: prefer the last-selected slug, then the first ACTIVE
+ * (non-DISABLED) membership. Returns null only when no usable membership exists.
+ */
+function resolveActiveRestaurant(
+  restaurants: UserRestaurantAssignment[],
+  savedSlug?: string | null
+): UserRestaurantAssignment | null {
+  const activeMemberships = restaurants.filter((r) => r.status !== 'DISABLED');
+  if (savedSlug) {
+    const matched = activeMemberships.find((r) => r.slug === savedSlug);
+    if (matched) return matched;
+  }
+  return activeMemberships[0] || null;
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(authService.getStoredUser());
@@ -49,6 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
   const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
   const [subscriptionDaysRemaining, setSubscriptionDaysRemaining] = useState<number | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true);
 
   const initAuth = useCallback(async () => {
     const token = authService.getToken();
@@ -57,6 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setRestaurants([]);
       setActiveRestaurantState(null);
       setPlatformViewingRestaurant(null);
+      setSubscriptionLoading(false);
       setLoading(false);
       return;
     }
@@ -66,10 +86,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(data.user);
       setRestaurants(data.restaurants);
 
-      // Restore active restaurant preference or default to first
+      // Deterministically resolve the active restaurant from ACTIVE memberships.
       const savedSlug = localStorage.getItem('aura_active_restaurant_slug');
-      const matched = data.restaurants.find(r => r.slug === savedSlug);
-      setActiveRestaurantState(matched || data.restaurants[0] || null);
+      setActiveRestaurantState(resolveActiveRestaurant(data.restaurants, savedSlug));
     } catch (err) {
       console.error('Session validation failed:', err);
       authService.logout();
@@ -77,6 +96,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setRestaurants([]);
       setActiveRestaurantState(null);
       setPlatformViewingRestaurant(null);
+      setSubscriptionLoading(false);
     } finally {
       setLoading(false);
     }
@@ -91,7 +111,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await authService.me();
       setUser(data.user);
       setRestaurants(data.restaurants);
-      const currentActive = data.restaurants.find(r => r.id === activeRestaurant?.id) || data.restaurants[0] || null;
+      const savedSlug = localStorage.getItem('aura_active_restaurant_slug');
+      const currentActive = resolveActiveRestaurant(data.restaurants, savedSlug);
       setActiveRestaurantState(currentActive);
       if (currentActive?.id) {
         await refreshSubscriptionFor(currentActive.id);
@@ -102,6 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshSubscriptionFor = async (restaurantId: string) => {
+    setSubscriptionLoading(true);
     try {
       const sub = await subscriptionService.getSubscription(restaurantId);
       setSubscriptionStatus(sub.status);
@@ -115,6 +137,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setSubscriptionPlan(null);
       setSubscriptionDaysRemaining(null);
+    } finally {
+      setSubscriptionLoading(false);
     }
   };
 
@@ -129,6 +153,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const target = platformViewingRestaurant || activeRestaurant;
     if (target?.id) {
       refreshSubscriptionFor(target.id);
+    } else {
+      setSubscriptionLoading(false);
     }
   }, [platformViewingRestaurant?.id, activeRestaurant?.id]);
 
@@ -136,10 +162,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const res = await authService.login(email, password);
     setUser(res.user);
     setRestaurants(res.restaurants);
-    const active = res.restaurants[0] || null;
+    setSubscriptionStatus(null);
+    const active = resolveActiveRestaurant(res.restaurants);
     setActiveRestaurantState(active);
     if (active) {
       localStorage.setItem('aura_active_restaurant_slug', active.slug);
+      // The active restaurant changed; mark subscription as pending so ProtectedRoute
+      // waits for resolution instead of gating on a stale/null status.
+      setSubscriptionLoading(true);
+    } else {
+      setSubscriptionLoading(false);
     }
     return res;
   };
@@ -231,6 +263,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         subscriptionStatus,
         subscriptionPlan,
         subscriptionDaysRemaining,
+        subscriptionLoading,
         refreshSubscription,
         isAuthenticated: Boolean(user && authService.getToken()),
         loading,

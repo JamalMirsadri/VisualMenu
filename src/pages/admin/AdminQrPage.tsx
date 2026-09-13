@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAdminData } from '../../hooks/useAdminData';
+import { RestaurantDataGate } from '../../components/admin/RestaurantDataGate';
+import { ErrorBanner } from '../../components/admin/ErrorBanner';
 import { useAuth } from '../../context/AuthContext';
 import { qrService } from '../../services/qrService';
 import type { QrCodeData } from '../../services/qrService';
@@ -13,11 +15,12 @@ import {
 } from 'lucide-react';
 
 export const AdminQrPage: React.FC = () => {
-  const { restaurant } = useAdminData();
+  const { restaurant, error, refresh, loading: restaurantLoading } = useAdminData();
   const { role } = useAuth();
 
   const [qrList, setQrList] = useState<QrCodeData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [qrError, setQrError] = useState<string | null>(null);
   const [tableNumber, setTableNumber] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
@@ -28,10 +31,11 @@ export const AdminQrPage: React.FC = () => {
     if (!restaurant) return;
     try {
       setLoading(true);
+      setQrError(null);
       const data = await qrService.getByRestaurant(restaurant.id);
       setQrList(data);
-    } catch (err) {
-      console.error('Failed to load QR codes:', err);
+    } catch (err: any) {
+      setQrError(err.message || 'Failed to load QR codes.');
     } finally {
       setLoading(false);
     }
@@ -41,7 +45,19 @@ export const AdminQrPage: React.FC = () => {
     loadQrs();
   }, [restaurant]);
 
-  if (!restaurant || loading) {
+  if (restaurantLoading || !restaurant) {
+    return (
+      <RestaurantDataGate
+        loading={restaurantLoading}
+        error={error}
+        hasRestaurant={Boolean(restaurant)}
+        loadingLabel="Loading QR Studio..."
+        onRetry={refresh}
+      />
+    );
+  }
+
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
         <div className="w-10 h-10 rounded-full border-2 border-amber-400/20 border-t-amber-400 animate-spin mb-4" />
@@ -96,6 +112,8 @@ export const AdminQrPage: React.FC = () => {
 
   return (
     <div className="space-y-8 max-w-6xl">
+      {error && <ErrorBanner message={error} onRetry={refresh} title="Could not load restaurant data" />}
+      {qrError && <ErrorBanner message={qrError} onRetry={loadQrs} title="Could not load QR codes" />}
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -201,7 +219,7 @@ export const AdminQrPage: React.FC = () => {
           </span>
         </div>
 
-        {qrList.length === 0 ? (
+        {qrList.length === 0 && !qrError ? (
           <div className="p-8 rounded-2xl bg-zinc-900/40 border border-zinc-800 text-center text-zinc-400">
             <QrIcon className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
             <p className="text-xs font-medium">No table QR codes generated yet.</p>

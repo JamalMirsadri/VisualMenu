@@ -117,7 +117,7 @@ export const AdminLayout: React.FC = () => {
             <div className="flex items-center gap-3 shrink-0">
               <NotificationBell />
               <Link
-                to={`/menu/${restaurant?.slug || 'demo-restaurant'}`}
+                to={`/menu/${restaurant?.slug || ''}`}
                 className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-amber-500/10 border border-amber-400/40 text-amber-300 hover:bg-amber-500 hover:text-black transition-all text-xs font-semibold min-h-[36px]"
               >
                 <Sparkles className="w-3.5 h-3.5 shrink-0" />

@@ -62,6 +62,8 @@ export const TableDetailDrawer: React.FC<TableDetailDrawerProps> = ({
     border: 'border-zinc-700',
   };
 
+  const activeOrders = table.activeOrders || [];
+
   const handleClaim = async (orderId: string) => {
     if (!activeRestaurant?.id) return;
     try {
@@ -190,7 +192,7 @@ export const TableDetailDrawer: React.FC<TableDetailDrawerProps> = ({
             <div>
               <span className="text-zinc-500 block text-[11px]">Time in State</span>
               <span className="font-mono font-semibold text-zinc-200">
-                {table.minutesInCurrentState} min
+                {table.minutesInCurrentState ?? 0} min
               </span>
             </div>
             <div>
@@ -246,11 +248,11 @@ export const TableDetailDrawer: React.FC<TableDetailDrawerProps> = ({
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
                   <UtensilsCrossed className="w-3.5 h-3.5 text-amber-400" />
-                  Active Orders ({table.activeOrders.length})
+                  Active Orders ({activeOrders.length})
                 </h3>
               </div>
 
-              {table.activeOrders.length === 0 ? (
+              {activeOrders.length === 0 ? (
                 <div className="p-8 text-center rounded-2xl bg-zinc-900/40 border border-dashed border-zinc-800 text-zinc-500">
                   <UtensilsCrossed className="w-8 h-8 mx-auto mb-2 opacity-30" />
                   <p className="text-sm font-medium">Table is currently available</p>
@@ -260,7 +262,7 @@ export const TableDetailDrawer: React.FC<TableDetailDrawerProps> = ({
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {table.activeOrders.map((order) => {
+                  {activeOrders.map((order) => {
                     const isActing = actingOrderId === order.id;
                     const assignedWaiter = order.assignedWaiter;
                     const isClaimedByMe =

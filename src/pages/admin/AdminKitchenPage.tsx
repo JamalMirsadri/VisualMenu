@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { orderService } from '../../services/orderService';
+import { ErrorBanner } from '../../components/admin/ErrorBanner';
 import type { Order, OrderStatus, OrderItemStatus } from '../../types';
 
 export const AdminKitchenPage: React.FC = () => {
@@ -21,6 +22,7 @@ export const AdminKitchenPage: React.FC = () => {
   const canUpdateKitchen = hasPermission('UPDATE_KITCHEN_STATUS') || hasPermission('CONFIRM_PREPARATION') || hasPermission('MARK_READY');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [sseConnected, setSseConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -30,15 +32,19 @@ export const AdminKitchenPage: React.FC = () => {
 
 
   const fetchKitchenOrders = async () => {
-    if (!activeRestaurant?.id) return;
+    if (!activeRestaurant?.id) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
+      setError(null);
       const data = await orderService.getOrders(activeRestaurant.id, { limit: 100 });
       // Kitchen focuses on active culinary stages
       const activeKitchenStages: OrderStatus[] = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY'];
       setOrders(data.filter((o) => activeKitchenStages.includes(o.status)));
-    } catch (err) {
-      console.error('Failed to load kitchen tickets', err);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load kitchen tickets.');
     } finally {
       setLoading(false);
     }
@@ -399,7 +405,17 @@ export const AdminKitchenPage: React.FC = () => {
 
       </div>
 
+      {error && (
+        <ErrorBanner message={error} onRetry={fetchKitchenOrders} title="Could not load kitchen tickets" />
+      )}
+
       {/* 3-Column KDS Floor Layout */}
+      {loading && orders.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-zinc-400">
+          <div className="w-9 h-9 rounded-full border-2 border-amber-400/20 border-t-amber-400 animate-spin mb-3" />
+          <p className="text-xs font-medium">Loading kitchen tickets...</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Column 1: Order Queue */}
         <div className="space-y-3">
@@ -488,6 +504,7 @@ export const AdminKitchenPage: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };

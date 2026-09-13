@@ -5,7 +5,6 @@ import {
   Clock,
   User,
   UtensilsCrossed,
-  AlertCircle,
   CheckCircle,
   Banknote,
   Search,
@@ -18,6 +17,7 @@ import { useAuth } from '../../context/AuthContext';
 import { orderService } from '../../services/orderService';
 import { paymentService } from '../../services/paymentService';
 import { TableDetailDrawer } from '../../components/admin/TableDetailDrawer';
+import { ErrorBanner } from '../../components/admin/ErrorBanner';
 import type { TableOperationalInfo, FloorSummary, Order } from '../../types';
 
 type OperationalFilter =
@@ -102,7 +102,10 @@ export const AdminFloorPage: React.FC = () => {
   const [cashError, setCashError] = useState<string | null>(null);
 
   const fetchFloor = async (silent = false) => {
-    if (!activeRestaurant?.id) return;
+    if (!activeRestaurant?.id) {
+      if (!silent) setLoading(false);
+      return;
+    }
     if (!silent) setLoading(true);
     try {
       const data = await orderService.getFloorState(activeRestaurant.id);
@@ -207,9 +210,10 @@ export const AdminFloorPage: React.FC = () => {
   // Quick claim directly from table card
   const handleQuickClaim = async (e: React.MouseEvent, table: TableOperationalInfo) => {
     e.stopPropagation();
-    if (!activeRestaurant?.id || table.activeOrders.length === 0) return;
+    const activeOrders = table.activeOrders || [];
+    if (!activeRestaurant?.id || activeOrders.length === 0) return;
     try {
-      const firstUnassigned = table.activeOrders.find((o) => !o.assignedWaiter);
+      const firstUnassigned = activeOrders.find((o) => !o.assignedWaiter);
       if (firstUnassigned) {
         await orderService.claimOrder(activeRestaurant.id, firstUnassigned.id);
         fetchFloor(true);
@@ -222,9 +226,10 @@ export const AdminFloorPage: React.FC = () => {
   // Quick serve directly from table card
   const handleQuickServe = async (e: React.MouseEvent, table: TableOperationalInfo) => {
     e.stopPropagation();
+    const activeOrders = table.activeOrders || [];
     if (!activeRestaurant?.id) return;
     try {
-      const readyOrder = table.activeOrders.find((o) => o.status === 'READY');
+      const readyOrder = activeOrders.find((o) => o.status === 'READY');
       if (readyOrder) {
         await orderService.serveOrder(activeRestaurant.id, readyOrder.id);
         fetchFloor(true);
@@ -262,7 +267,7 @@ export const AdminFloorPage: React.FC = () => {
       list = list.filter(
         (t) =>
           t.number.toLowerCase().includes(q) ||
-          t.name.toLowerCase().includes(q) ||
+          (t.name && t.name.toLowerCase().includes(q)) ||
           (t.location && t.location.toLowerCase().includes(q))
       );
     }
@@ -419,10 +424,7 @@ export const AdminFloorPage: React.FC = () => {
           <p className="text-xs font-medium">Loading floor state...</p>
         </div>
       ) : error ? (
-        <div className="p-6 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          <span>{error}</span>
-        </div>
+        <ErrorBanner message={error} onRetry={() => fetchFloor()} title="Could not load floor state" />
       ) : filteredTables.length === 0 ? (
         <div className="p-12 text-center rounded-2xl bg-zinc-900/30 border border-dashed border-zinc-800 text-zinc-500">
           <LayoutGrid className="w-10 h-10 mx-auto mb-2 opacity-30" />
@@ -442,7 +444,7 @@ export const AdminFloorPage: React.FC = () => {
             };
 
             const hasReadyOrder = table.state === 'READY_TO_SERVE';
-            const hasUnassignedOrder = table.activeOrders.some((o) => !o.assignedWaiter);
+            const hasUnassignedOrder = (table.activeOrders || []).some((o) => !o.assignedWaiter);
             const myAssigned = table.assignedWaiters?.some((w) => w.userId === user?.id);
 
             return (
@@ -496,7 +498,7 @@ export const AdminFloorPage: React.FC = () => {
                         Duration in state
                       </span>
                       <span className="font-mono font-medium text-zinc-200">
-                        {table.minutesInCurrentState} min
+                        {table.minutesInCurrentState ?? 0} min
                       </span>
                     </div>
 

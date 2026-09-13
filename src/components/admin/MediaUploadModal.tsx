@@ -31,8 +31,16 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Store the actual File object (not just the display name).
     setSelectedFile(file);
-    const isVid = file.type.startsWith('video') || file.name.endsWith('.mp4') || file.name.endsWith('.webm');
+
+    const name = file.name.toLowerCase();
+    const isVid =
+      file.type.startsWith('video/') ||
+      name.endsWith('.mp4') ||
+      name.endsWith('.webm') ||
+      name.endsWith('.mov') ||
+      name.endsWith('.quicktime');
     setType(isVid ? 'video' : 'image');
     if (!title) {
       setTitle(file.name.replace(/\.[^/.]+$/, ''));
@@ -46,6 +54,20 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
       return;
     }
 
+    // Validate against the real File object / URL value, not the displayed name.
+    const file = selectedFile;
+    const trimmedUrl = url.trim();
+
+    if (!file && !trimmedUrl) {
+      setError('Please select a local file to upload or enter a media URL.');
+      return;
+    }
+
+    if (file && !restaurantId) {
+      setError('The restaurant is not ready yet. Please try again in a moment.');
+      return;
+    }
+
     try {
       setError('');
       setUploading(true);
@@ -55,9 +77,9 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
         .map((t) => t.trim())
         .filter(Boolean);
 
-      if (selectedFile && restaurantId) {
+      if (file && restaurantId) {
         setProgress(0);
-        const uploaded = await mediaService.uploadFile(restaurantId, selectedFile, {
+        const uploaded = await mediaService.uploadFile(restaurantId, file, {
           altText: title.trim(),
           onProgress: (pct) => setProgress(pct),
         });
@@ -74,16 +96,10 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
           tags,
         });
       } else {
-        if (!url.trim()) {
-          setError('Please select a local file to upload or enter a media URL.');
-          setUploading(false);
-          return;
-        }
-
         onAddMedia({
           title: title.trim(),
           type,
-          url: url.trim(),
+          url: trimmedUrl,
           tags,
         });
       }
@@ -92,6 +108,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
       setUrl('');
       setSelectedFile(null);
       setTagsText('');
+      setType('image');
       setError('');
       onClose();
     } catch (err: any) {
@@ -210,10 +227,7 @@ export const MediaUploadModal: React.FC<MediaUploadModalProps> = ({
               <input
                 type="text"
                 value={url}
-                onChange={(e) => {
-                  setUrl(e.target.value);
-                  setSelectedFile(null);
-                }}
+                onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://... (CDN or external URL)"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400 text-xs font-mono"
               />

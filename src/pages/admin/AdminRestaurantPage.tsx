@@ -10,13 +10,15 @@ import {
   Video,
 } from 'lucide-react';
 import { useAdminData } from '../../hooks/useAdminData';
+import { RestaurantDataGate } from '../../components/admin/RestaurantDataGate';
+import { ErrorBanner } from '../../components/admin/ErrorBanner';
 import { settingsService } from '../../services/settingsService';
 import { THEME_REGISTRY } from '../../theme/themeConfig';
 import type { ThemeDefinition } from '../../theme/themeConfig';
 import type { RestaurantSettings } from '../../types';
 
 export const AdminRestaurantPage: React.FC = () => {
-  const { restaurant, updateRestaurant, loading } = useAdminData();
+  const { restaurant, updateRestaurant, loading, error, refresh } = useAdminData();
 
   const [activeTab, setActiveTab] = useState<
     'identity' | 'theme' | 'typography' | 'stage' | 'toggles' | 'operations'
@@ -162,15 +164,19 @@ export const AdminRestaurantPage: React.FC = () => {
 
   if (loading || !restaurant) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
-        <div className="w-10 h-10 rounded-full border-2 border-amber-400/20 border-t-amber-400 animate-spin mb-4" />
-        <p className="text-sm font-medium">Loading Branding Studio...</p>
-      </div>
+      <RestaurantDataGate
+        loading={loading}
+        error={error}
+        hasRestaurant={Boolean(restaurant)}
+        loadingLabel="Loading Branding Studio..."
+        onRetry={refresh}
+      />
     );
   }
 
   return (
     <div className="space-y-6 max-w-5xl">
+      {error && <ErrorBanner message={error} onRetry={refresh} title="Could not load restaurant" />}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

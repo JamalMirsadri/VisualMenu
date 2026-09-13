@@ -15,6 +15,8 @@ import {
   X,
 } from 'lucide-react';
 import { FoodFormModal } from '../../components/admin/FoodFormModal';
+import { RestaurantDataGate } from '../../components/admin/RestaurantDataGate';
+import { ErrorBanner } from '../../components/admin/ErrorBanner';
 import { useAdminData } from '../../hooks/useAdminData';
 import { useAuth } from '../../context/AuthContext';
 import type { FoodItem } from '../../types';
@@ -25,6 +27,8 @@ export const AdminFoodsPage: React.FC = () => {
     categories,
     foods,
     loading,
+    error,
+    refresh,
     createFood,
     updateFood,
     deleteFood,
@@ -103,15 +107,19 @@ export const AdminFoodsPage: React.FC = () => {
 
   if (loading || !restaurant) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
-        <div className="w-10 h-10 rounded-full border-2 border-amber-400/20 border-t-amber-400 animate-spin mb-4" />
-        <p className="text-sm font-medium">Loading culinary items...</p>
-      </div>
+      <RestaurantDataGate
+        loading={loading}
+        error={error}
+        hasRestaurant={Boolean(restaurant)}
+        loadingLabel="Loading culinary items..."
+        onRetry={refresh}
+      />
     );
   }
 
   return (
     <div className="space-y-6">
+      {error && <ErrorBanner message={error} onRetry={refresh} title="Could not load dishes" />}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

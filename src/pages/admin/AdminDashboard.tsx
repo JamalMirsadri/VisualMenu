@@ -22,6 +22,8 @@ import {
   Lock,
 } from 'lucide-react';
 import { FoodFormModal } from '../../components/admin/FoodFormModal';
+import { RestaurantDataGate } from '../../components/admin/RestaurantDataGate';
+import { ErrorBanner } from '../../components/admin/ErrorBanner';
 import { useAdminData } from '../../hooks/useAdminData';
 import { useAuth } from '../../context/AuthContext';
 import { restaurantService } from '../../services/restaurantService';
@@ -34,6 +36,8 @@ export const AdminDashboard: React.FC = () => {
     foods,
     media,
     loading,
+    error,
+    refresh,
     createFood,
     updateFood,
     deleteFood,
@@ -42,6 +46,7 @@ export const AdminDashboard: React.FC = () => {
 
   const { role, activeRestaurant, hasPermission } = useAuth();
   const [metrics, setMetrics] = useState<any>(null);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
   const [isFoodModalOpen, setIsFoodModalOpen] = useState(false);
   const [editingFood, setEditingFood] = useState<FoodItem | null>(null);
 
@@ -60,12 +65,19 @@ export const AdminDashboard: React.FC = () => {
   const jobTemplate = activeRestaurant?.jobTemplate;
   const roleLabel = jobTemplate ? jobTemplate.replace('_', ' ') : role || 'STAFF';
 
-  useEffect(() => {
-    if (activeRestaurant?.id) {
-      restaurantService.getDashboardMetrics(activeRestaurant.id)
-        .then((data) => setMetrics(data))
-        .catch((err) => console.warn('Could not fetch dashboard metrics', err));
+  const fetchMetrics = async () => {
+    if (!activeRestaurant?.id) return;
+    setMetricsError(null);
+    try {
+      const data = await restaurantService.getDashboardMetrics(activeRestaurant.id);
+      setMetrics(data);
+    } catch (err: any) {
+      setMetricsError(err.message || 'Could not load dashboard metrics.');
     }
+  };
+
+  useEffect(() => {
+    fetchMetrics();
   }, [activeRestaurant?.id]);
 
   const availableFoodsCount = foods.filter((f) => f.available).length;
@@ -88,15 +100,26 @@ export const AdminDashboard: React.FC = () => {
 
   if (loading || !restaurant) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
-        <div className="w-10 h-10 rounded-full border-2 border-amber-400/20 border-t-amber-400 animate-spin mb-4" />
-        <p className="text-sm font-medium">Loading restaurant metrics...</p>
-      </div>
+      <RestaurantDataGate
+        loading={loading}
+        error={error}
+        hasRestaurant={Boolean(restaurant)}
+        loadingLabel="Loading restaurant metrics..."
+        onRetry={refresh}
+      />
     );
   }
 
   return (
     <div className="space-y-8">
+      {error && <ErrorBanner message={error} onRetry={refresh} title="Could not load restaurant data" />}
+      {metricsError && (
+        <ErrorBanner
+          message={metricsError}
+          onRetry={fetchMetrics}
+          title="Could not load dashboard metrics"
+        />
+      )}
       {/* Welcome Banner */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500/20 via-zinc-900 to-zinc-900 border border-amber-500/30 p-6 sm:p-8">
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -131,7 +154,7 @@ export const AdminDashboard: React.FC = () => {
             )}
             {canViewMenu && (
               <a
-                href={`/menu/${restaurant.slug || 'demo-restaurant'}`}
+                href={`/menu/${restaurant.slug}`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs uppercase tracking-wider transition-all border border-zinc-700"

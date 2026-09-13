@@ -25,6 +25,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { orderService } from '../../services/orderService';
 import { paymentService } from '../../services/paymentService';
+import { ErrorBanner } from '../../components/admin/ErrorBanner';
 import type { Order, OrderStatus, FiscalDocument } from '../../types';
 
 const STATUS_FILTERS: Array<{ label: string; value: OrderStatus | 'ALL' }> = [
@@ -161,7 +162,10 @@ export const AdminOrdersPage: React.FC = () => {
   };
 
   const fetchOrders = async () => {
-    if (!activeRestaurant?.id) return;
+    if (!activeRestaurant?.id) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -476,10 +480,7 @@ export const AdminOrdersPage: React.FC = () => {
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
+        <ErrorBanner message={error} onRetry={fetchOrders} title="Could not load orders" />
       )}
 
       {/* Operational Role Station Filter Tabs */}

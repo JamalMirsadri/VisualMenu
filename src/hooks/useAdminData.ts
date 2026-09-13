@@ -3,9 +3,13 @@ import { restaurantService } from '../services/restaurantService';
 import { categoryService } from '../services/categoryService';
 import { foodService } from '../services/foodService';
 import { mediaService } from '../services/mediaService';
+import { useAuth } from '../context/AuthContext';
 import type { Category, FoodItem, MediaItem, Restaurant } from '../types';
 
-export function useAdminData(slug: string = 'demo-restaurant') {
+export function useAdminData(slug?: string) {
+  const { activeRestaurant } = useAuth();
+  const effectiveSlug = slug || activeRestaurant?.slug || '';
+
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [foods, setFoods] = useState<FoodItem[]>([]);
@@ -14,14 +18,26 @@ export function useAdminData(slug: string = 'demo-restaurant') {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!effectiveSlug) {
+      setLoading(false);
+      setError('No restaurant is assigned to your account.');
+      setRestaurant(null);
+      setCategories([]);
+      setFoods([]);
+      setMedia([]);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
       // Fetch restaurant
-      const rest = await restaurantService.getBySlug(slug);
+      const rest = await restaurantService.getBySlug(effectiveSlug);
       setRestaurant(rest);
 
-      // Concurrently fetch categories, foods, and media safely
+      // Concurrently fetch categories, foods, and media. Keep whatever loads and
+      // surface a clear error for any sub-resource that failed (never silently
+      // collapse a backend error into an empty list).
       const [catsRes, foodsRes, mediaRes] = await Promise.allSettled([
         categoryService.getByRestaurant(rest.id),
         foodService.getByRestaurant(rest.id, { includeDeleted: false }),
@@ -31,13 +47,28 @@ export function useAdminData(slug: string = 'demo-restaurant') {
       setCategories(catsRes.status === 'fulfilled' ? catsRes.value : []);
       setFoods(foodsRes.status === 'fulfilled' ? foodsRes.value : []);
       setMedia(mediaRes.status === 'fulfilled' ? mediaRes.value : []);
+
+      const failedLabels: string[] = [];
+      if (catsRes.status === 'rejected') failedLabels.push('categories');
+      if (foodsRes.status === 'rejected') failedLabels.push('dishes');
+      if (mediaRes.status === 'rejected') failedLabels.push('media');
+
+      if (failedLabels.length > 0) {
+        setError(
+          `Couldn't load ${failedLabels.join(', ')} from the server. Showing available data — retry to reload.`
+        );
+      }
     } catch (err: any) {
       console.error('Failed to load admin data:', err);
       setError(err.message || 'Failed to fetch restaurant admin data');
+      setRestaurant(null);
+      setCategories([]);
+      setFoods([]);
+      setMedia([]);
     } finally {
       setLoading(false);
     }
-  }, [slug]);
+  }, [effectiveSlug]);
 
   useEffect(() => {
     refresh();

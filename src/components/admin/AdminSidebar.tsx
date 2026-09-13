@@ -104,7 +104,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           )}
           <div className="overflow-hidden min-w-0">
             <h2 className="font-serif-luxury text-sm font-bold text-white tracking-wide truncate" title={restaurant?.name}>
-              {restaurant?.name || 'Loading Restaurant...'}
+              {restaurant?.name || 'No Restaurant'}
             </h2>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
@@ -116,7 +116,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
         {/* Live Menu Preview Link */}
         <a
-          href={`/menu/${restaurant?.slug || 'demo-restaurant'}`}
+          href={`/menu/${restaurant?.slug || ''}`}
           target="_blank"
           rel="noreferrer"
           className="flex items-center justify-between w-full px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 via-amber-400/15 to-transparent border border-amber-400/40 text-amber-300 hover:text-white hover:border-amber-400 text-xs font-semibold tracking-wide transition-all group shadow-sm min-h-[38px]"
