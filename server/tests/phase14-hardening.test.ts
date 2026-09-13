@@ -73,13 +73,32 @@ async function runTests() {
       }
     });
 
-    await assert('4. CORS rejects disallowed origin', async () => {
+    await assert('4. CORS denies disallowed origin (no Access-Control-Allow-Origin)', async () => {
       const res = await request(app).get('/api/health').set('Origin', 'http://evil.example.com');
       if (res.headers['access-control-allow-origin'] === 'http://evil.example.com') {
         throw new Error('Disallowed origin must not be granted Access-Control-Allow-Origin');
       }
-      if (res.status < 400) {
-        throw new Error(`Expected 4xx/5xx for disallowed origin, got ${res.status}`);
+    });
+
+    await assert('5. CORS preflight (OPTIONS) allows configured origin', async () => {
+      const res = await request(app)
+        .options('/api/auth/login')
+        .set('Origin', 'http://localhost:5173')
+        .set('Access-Control-Request-Method', 'POST')
+        .set('Access-Control-Request-Headers', 'content-type,authorization');
+      if (res.headers['access-control-allow-origin'] !== 'http://localhost:5173') {
+        throw new Error('Preflight must reflect allowed origin');
+      }
+    });
+
+    await assert('6. CORS preflight (OPTIONS) denies disallowed origin', async () => {
+      const res = await request(app)
+        .options('/api/auth/login')
+        .set('Origin', 'http://evil.example.com')
+        .set('Access-Control-Request-Method', 'POST')
+        .set('Access-Control-Request-Headers', 'content-type,authorization');
+      if (res.headers['access-control-allow-origin'] === 'http://evil.example.com') {
+        throw new Error('Preflight must not allow disallowed origin');
       }
     });
 

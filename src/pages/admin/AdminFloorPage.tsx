@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { buildApiUrl, getAuthToken } from '../../config';
 import {
   LayoutGrid,
   Clock,
@@ -128,8 +129,8 @@ export const AdminFloorPage: React.FC = () => {
   useEffect(() => {
     if (!activeRestaurant?.id) return;
 
-    const token = localStorage.getItem('token');
-    const sseUrl = `/api/restaurants/${activeRestaurant.id}/orders/stream${
+    const token = getAuthToken();
+    const sseUrl = `${buildApiUrl(`/restaurants/${activeRestaurant.id}/orders/stream`)}${
       token ? `?token=${encodeURIComponent(token)}` : ''
     }`;
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { buildApiUrl, getAuthToken } from '../../config';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -87,9 +88,8 @@ export const AdminNotificationsPage: React.FC = () => {
 
     let es: EventSource | null = null;
     try {
-      const token = localStorage.getItem('aura_admin_token') || localStorage.getItem('token') || '';
-      const baseUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '');
-      const sseUrl = `${baseUrl}/restaurants/${activeRestaurant.id}/events${
+      const token = getAuthToken() || '';
+      const sseUrl = `${buildApiUrl(`/restaurants/${activeRestaurant.id}/events`)}${
         token ? `?token=${encodeURIComponent(token)}` : ''
       }`;
       es = new EventSource(sseUrl);

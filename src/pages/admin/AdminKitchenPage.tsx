@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { buildApiUrl, getAuthToken } from '../../config';
 import {
   ChefHat,
   Clock,
@@ -51,9 +52,8 @@ export const AdminKitchenPage: React.FC = () => {
   useEffect(() => {
     if (!activeRestaurant?.id) return;
 
-    const token = localStorage.getItem('aura_admin_token') || '';
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-    const sseUrl = `${baseUrl}/restaurants/${activeRestaurant.id}/events?token=${encodeURIComponent(
+    const token = getAuthToken() || '';
+    const sseUrl = `${buildApiUrl(`/restaurants/${activeRestaurant.id}/events`)}?token=${encodeURIComponent(
       token
     )}`;
 

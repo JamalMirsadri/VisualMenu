@@ -1,3 +1,5 @@
+import { API_BASE_URL, getAuthToken } from '../config';
+
 export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -9,16 +11,13 @@ class ApiClient {
   private baseUrl: string;
 
   constructor(baseUrl?: string) {
-    this.baseUrl =
-      baseUrl ||
-      (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL) ||
-      '/api';
+    this.baseUrl = baseUrl || API_BASE_URL;
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('aura_admin_token') : null;
+    const token = getAuthToken();
 
     const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 

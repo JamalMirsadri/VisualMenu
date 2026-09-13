@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { buildApiUrl } from '../../config';
 import { useParams, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -188,9 +189,7 @@ export const CustomerOrderTrackingPage: React.FC = () => {
         eventSourceRef.current = null;
       }
 
-      const sseUrl = `${
-        import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
-      }/orders/track/${publicOrderToken}/events`;
+      const sseUrl = buildApiUrl(`/orders/track/${publicOrderToken}/events`);
 
       const es = new EventSource(sseUrl);
       eventSourceRef.current = es;

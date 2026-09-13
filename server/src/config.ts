@@ -27,18 +27,29 @@ export function getJwtSecret(): string {
 /**
  * Returns the allowlist of permitted browser origins for CORS.
  *
- * Local development origins are configurable; production origins must be
- * provided explicitly via ALLOWED_ORIGINS (comma-separated).
+ * In production the origin list MUST come from `ALLOWED_ORIGINS`
+ * (comma-separated). If it is missing in production, an empty list is returned
+ * (fail-safe: all cross-origin requests are denied). Local development falls
+ * back to the Vite dev server origins so it keeps working out of the box.
  */
 export function getAllowedOrigins(): string[] {
   const raw = process.env.ALLOWED_ORIGINS;
-  const defaults = ['http://localhost:5173', 'http://127.0.0.1:5173'];
-  if (!raw) {
-    return defaults;
+  if (raw && raw.trim()) {
+    const configured = raw
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin.length > 0);
+    if (configured.length > 0) {
+      return configured;
+    }
   }
-  const configured = raw
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
-  return configured.length > 0 ? configured : defaults;
+
+  if (process.env.NODE_ENV === 'production') {
+    console.warn(
+      '[config] ALLOWED_ORIGINS is not set in production. Cross-origin requests will be denied.'
+    );
+    return [];
+  }
+
+  return ['http://localhost:5173', 'http://127.0.0.1:5173'];
 }

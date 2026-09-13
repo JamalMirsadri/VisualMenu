@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { buildApiUrl, getAuthToken } from '../../config';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { notificationService, type NotificationItem } from '../../services/notificationService';
@@ -40,9 +41,8 @@ export const NotificationBell: React.FC = () => {
     let es: EventSource | null = null;
     if (activeRestaurant?.id) {
       try {
-        const token = localStorage.getItem('aura_admin_token') || localStorage.getItem('token') || '';
-        const baseUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '');
-        const sseUrl = `${baseUrl}/restaurants/${activeRestaurant.id}/events${
+        const token = getAuthToken() || '';
+        const sseUrl = `${buildApiUrl(`/restaurants/${activeRestaurant.id}/events`)}${
           token ? `?token=${encodeURIComponent(token)}` : ''
         }`;
         es = new EventSource(sseUrl);

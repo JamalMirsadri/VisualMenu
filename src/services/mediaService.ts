@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { buildApiUrl, getAuthToken } from '../config';
 import type { MediaItem } from '../types';
 
 export const mediaService = {
@@ -31,11 +32,11 @@ export const mediaService = {
     if (extra?.altText) formData.append('altText', extra.altText);
     if (extra?.isPrimary !== undefined) formData.append('isPrimary', String(extra.isPrimary));
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('aura_admin_token') : null;
+    const token = getAuthToken();
 
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', `/api/restaurants/${restaurantId}/media/upload`);
+      xhr.open('POST', buildApiUrl(`/restaurants/${restaurantId}/media/upload`));
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       }

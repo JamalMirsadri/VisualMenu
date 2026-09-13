@@ -32,17 +32,10 @@ import { getAllowedOrigins } from './config';
 export const app = express();
 
 // Middleware
-const allowedOrigins = getAllowedOrigins();
+// CORS: reflect an allowlisted origin; deny (no ACAO header) any other origin.
 app.use(
   cors({
-    origin(origin, callback) {
-      // Allow same-origin / non-browser requests (no Origin header) and any allowlisted origin.
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('CORS origin not allowed'));
-      }
-    },
+    origin: getAllowedOrigins(),
     credentials: true,
   })
 );
