@@ -231,6 +231,16 @@ publicMenuRouter.get(
         return;
       }
 
+      if (!data.restaurant.isActive) {
+        res.status(503).json({
+          success: false,
+          code: 'RESTAURANT_SERVICE_UNAVAILABLE',
+          errorCode: 'RESTAURANT_SERVICE_UNAVAILABLE',
+          message: 'Restaurant service temporarily unavailable',
+        });
+        return;
+      }
+
       res.status(200).json({
         success: true,
         data,
@@ -258,6 +268,16 @@ publicMenuRouter.get(
           success: false,
           message: `Restaurant with slug '${restaurantSlug}' was not found.`,
           errorCode: 'RESTAURANT_NOT_FOUND',
+        });
+        return;
+      }
+
+      if (!data.restaurant.isActive) {
+        res.status(503).json({
+          success: false,
+          code: 'RESTAURANT_SERVICE_UNAVAILABLE',
+          errorCode: 'RESTAURANT_SERVICE_UNAVAILABLE',
+          message: 'Restaurant service temporarily unavailable',
         });
         return;
       }

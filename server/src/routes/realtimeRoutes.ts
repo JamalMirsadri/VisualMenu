@@ -2,10 +2,9 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../prisma';
 import { realtimeService } from '../services/realtimeService';
+import { getJwtSecret } from '../config';
 
 export const realtimeRouter = Router();
-
-const JWT_SECRET = process.env.JWT_SECRET || 'aura_super_secure_jwt_secret_dev_2026_key';
 
 /**
  * GET /api/restaurants/:restaurantId/events
@@ -36,7 +35,7 @@ const handleRestaurantStream = async (req: Request, res: Response, next: NextFun
 
       let userId: string;
       try {
-        const payload = jwt.verify(token, JWT_SECRET) as { userId: string };
+        const payload = jwt.verify(token, getJwtSecret()) as { userId: string };
         userId = payload.userId;
       } catch {
         res.status(401).json({

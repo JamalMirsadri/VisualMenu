@@ -1,5 +1,7 @@
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
+import './setup';
+import { createRestaurantWithSubscription } from './helpers';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { NifValidator } from '../src/services/fiscal/nifValidator';
@@ -62,7 +64,7 @@ async function runPhase8Tests() {
       const ownerUser = loginRes.body.data.user;
 
       // Create Restaurant A
-      restaurantA = await prisma.restaurant.create({
+      restaurantA = await createRestaurantWithSubscription({
         data: {
           name: 'Phase 8 Bistro A',
           slug: 'p8-rest-a',
@@ -148,7 +150,7 @@ async function runPhase8Tests() {
         },
       });
 
-      restaurantB = await prisma.restaurant.create({
+      restaurantB = await createRestaurantWithSubscription({
         data: {
           name: 'Phase 8 Cantina B',
           slug: 'p8-rest-b',

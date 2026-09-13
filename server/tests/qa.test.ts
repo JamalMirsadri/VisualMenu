@@ -1,4 +1,6 @@
 import request from 'supertest';
+import './setup';
+import { ensureActiveSubscription } from './helpers';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { Role, OrderStatus, AuditAction } from '@prisma/client';
@@ -62,6 +64,7 @@ async function setup() {
     .send({ name: 'QA Alpha Dining', slug: restaurantAlphaSlug, currency: 'USD' });
   if (restA.status !== 201) throw new Error(`Rest A creation failed: ${JSON.stringify(restA.body)}`);
   restaurantAlphaId = restA.body.data.id;
+  await ensureActiveSubscription(restaurantAlphaId);
 
   await prisma.userRestaurant.create({
     data: {
@@ -87,6 +90,7 @@ async function setup() {
     .send({ name: 'QA Beta Bistro', slug: restaurantBetaSlug, currency: 'EUR' });
   if (restB.status !== 201) throw new Error(`Rest B creation failed: ${JSON.stringify(restB.body)}`);
   restaurantBetaId = restB.body.data.id;
+  await ensureActiveSubscription(restaurantBetaId);
 
   await prisma.userRestaurant.create({
     data: {

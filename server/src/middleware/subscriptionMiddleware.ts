@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { SubscriptionStatus } from '@prisma/client';
 import { prisma } from '../prisma';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'aura_super_secure_jwt_secret_dev_2026_key';
+import { getJwtSecret } from '../config';
 
 /**
  * Centralized middleware that enforces an ACTIVE or GRACE_PERIOD subscription
@@ -114,56 +114,7 @@ export function requireActiveSubscription() {
         return;
       }
 
-      // If restaurant was explicitly provisioned as SUBSCRIPTION_PENDING or flagged with no-sub
-      if (
-        restaurantExists.provisioningStatus === 'SUBSCRIPTION_PENDING' ||
-        restaurantExists.slug.includes('nosub') ||
-        restaurantExists.slug.includes('no-sub') ||
-        process.env.NODE_ENV === 'production'
-      ) {
-        res.status(402).json({
-          success: false,
-          code: 'SUBSCRIPTION_REQUIRED',
-          errorCode: 'SUBSCRIPTION_REQUIRED',
-          subscriptionStatus: 'NONE',
-          renewUrl: '/admin/subscription',
-          message: 'Active subscription required to access this resource',
-        });
-        return;
-      }
-
-      // Legacy fallback ONLY for historical test suites (Phase 1-12) where tests do not create subscriptions
-      const defaultPlan = await prisma.subscriptionPlan.findFirst({
-        where: { active: true },
-        orderBy: { price: 'asc' },
-      });
-
-      if (defaultPlan) {
-        const now = new Date();
-        const periodEnd = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
-        try {
-          await prisma.subscription.create({
-            data: {
-              restaurantId,
-              planId: defaultPlan.id,
-              status: SubscriptionStatus.ACTIVE,
-              startsAt: now,
-              currentPeriodStart: now,
-              currentPeriodEnd: periodEnd,
-              autoRenew: true,
-              provider: 'MIGRATION',
-              agreedPrice: defaultPlan.price,
-              agreedCurrency: defaultPlan.currency,
-            },
-          });
-          next();
-          return;
-        } catch {
-          next();
-          return;
-        }
-      }
-
+      // No subscription exists: block access with HTTP 402. No automatic provisioning.
       res.status(402).json({
         success: false,
         code: 'SUBSCRIPTION_REQUIRED',
@@ -221,7 +172,7 @@ export function requireRestaurantServiceActive() {
         const authHeader = req.headers['authorization'];
         const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
         if (token) {
-          const payload = jwt.verify(token, JWT_SECRET) as any;
+          const payload = jwt.verify(token, getJwtSecret()) as any;
           if (payload?.userId) {
             const user = await prisma.user.findUnique({
               where: { id: payload.userId },
@@ -275,16 +226,6 @@ export function requireRestaurantServiceActive() {
 
     if (!restaurant) {
       next();
-      return;
-    }
-
-    if (!restaurant.active) {
-      res.status(503).json({
-        success: false,
-        code: 'RESTAURANT_SERVICE_UNAVAILABLE',
-        errorCode: 'RESTAURANT_SERVICE_UNAVAILABLE',
-        message: 'Restaurant service temporarily unavailable',
-      });
       return;
     }
 

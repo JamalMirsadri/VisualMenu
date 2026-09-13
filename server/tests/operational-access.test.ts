@@ -1,5 +1,7 @@
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
+import './setup';
+import { createRestaurantWithSubscription } from './helpers';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { Role, StaffStatus } from '@prisma/client';
@@ -116,7 +118,7 @@ async function runOperationalAccessTests() {
         data: { email: ownerAEmail, name: 'Alice Owner', passwordHash, active: true },
       });
 
-      restaurantA = await prisma.restaurant.create({
+      restaurantA = await createRestaurantWithSubscription({
         data: {
           name: `Operational Bistro A ${timestamp}`,
           slug: `op-bistro-a-${timestamp}`,
@@ -142,7 +144,7 @@ async function runOperationalAccessTests() {
         data: { email: ownerBEmail, name: 'Bob Owner', passwordHash, active: true },
       });
 
-      restaurantB = await prisma.restaurant.create({
+      restaurantB = await createRestaurantWithSubscription({
         data: {
           name: `Operational Cantina B ${timestamp}`,
           slug: `op-cantina-b-${timestamp}`,

@@ -12,7 +12,7 @@ import {
   hasPermission,
 } from '../constants/permissions';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'aura_super_secure_jwt_secret_dev_2026_key';
+import { getJwtSecret } from '../config';
 
 export interface CreateStaffInput {
   email: string;
@@ -978,7 +978,7 @@ export class StaffService {
         email: user.email,
         name: user.name,
       },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 

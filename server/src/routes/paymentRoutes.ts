@@ -98,6 +98,8 @@ paymentRouter.post(
 paymentRouter.get(
   '/payments/:id',
   validateUuidParams('id'),
+  authenticateToken,
+  requirePermission('VIEW_PAYMENTS'),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;

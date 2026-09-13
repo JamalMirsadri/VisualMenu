@@ -27,6 +27,7 @@
     "test:video-playback": "tsx server/tests/foodVideoPlayback.test.ts",
     "test:video-transition": "tsx server/tests/foodVideoTransition.test.ts",
     "test:food-modal-scroll": "tsx server/tests/foodFormModalScroll.test.ts",
+    "test:hardening": "tsx server/tests/phase14-hardening.test.ts",
     "lint": "oxlint",
     "preview": "vite preview"
   },

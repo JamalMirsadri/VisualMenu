@@ -1,5 +1,7 @@
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
+import './setup';
+import { createRestaurantWithSubscription } from './helpers';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { Role } from '@prisma/client';
@@ -55,7 +57,7 @@ async function runPhase7Tests() {
       const ownerUser = loginRes.body.data.user;
 
       // Create Restaurant A
-      restaurantA = await prisma.restaurant.create({
+      restaurantA = await createRestaurantWithSubscription({
         data: {
           name: 'Phase 7 Gastronomy A',
           slug: 'p7-rest-a',
@@ -81,7 +83,7 @@ async function runPhase7Tests() {
       });
 
       // Create Restaurant B
-      restaurantB = await prisma.restaurant.create({
+      restaurantB = await createRestaurantWithSubscription({
         data: {
           name: 'Phase 7 Bistro B',
           slug: 'p7-rest-b',

@@ -1,5 +1,7 @@
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
+import './setup';
+import { createRestaurantWithSubscription } from './helpers';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { Role, StaffStatus, OrderStatus } from '@prisma/client';
@@ -97,7 +99,7 @@ async function runOperationsTestSuite() {
     // SETUP FIXTURES
     // ----------------------------------------------------
     console.log('--- Setting up Phase 12 test fixtures ---');
-    restaurantA = await prisma.restaurant.create({
+    restaurantA = await createRestaurantWithSubscription({
       data: {
         name: `Ops Test Restaurant A ${timestamp}`,
         slug: `ops-test-a-${timestamp}`,
@@ -106,7 +108,7 @@ async function runOperationsTestSuite() {
       },
     });
 
-    restaurantB = await prisma.restaurant.create({
+    restaurantB = await createRestaurantWithSubscription({
       data: {
         name: `Ops Test Restaurant B ${timestamp}`,
         slug: `ops-test-b-${timestamp}`,

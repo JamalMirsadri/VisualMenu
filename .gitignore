@@ -100,3 +100,5 @@ Desktop.ini
 !graphify/
 !.graphify/
 graphify-out/cache/
+# Graphify dated backups (regenerated on each update)
+graphify-out/20*/

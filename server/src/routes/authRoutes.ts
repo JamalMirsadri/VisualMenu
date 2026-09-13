@@ -8,7 +8,7 @@ import { loginRateLimiter } from '../middleware/rateLimiter';
 import { PERMISSION_CATALOG, ROLE_PERMISSIONS } from '../constants/permissions';
 
 export const authRouter = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'aura_super_secure_jwt_secret_dev_2026_key';
+import { getJwtSecret } from '../config';
 
 function resolveUserRestaurantPermissions(ur: {
   role: Role;
@@ -98,7 +98,7 @@ authRouter.post('/login', loginRateLimiter, async (req: Request, res: Response):
         email: user.email,
         name: user.name,
       },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 

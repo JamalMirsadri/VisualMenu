@@ -2,6 +2,8 @@ import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
+import './setup';
+import { createRestaurantWithSubscription } from './helpers';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { Role } from '@prisma/client';
@@ -41,7 +43,7 @@ async function runTenantIsolationTests() {
       const passwordHash = await bcrypt.hash('Password123!', 10);
 
       // Create Restaurant Alpha
-      restaurantA = await prisma.restaurant.create({
+      restaurantA = await createRestaurantWithSubscription({
         data: {
           name: `Alpha Dining ${timestamp}`,
           slug: `alpha-${timestamp}`,
@@ -52,7 +54,7 @@ async function runTenantIsolationTests() {
       });
 
       // Create Restaurant Beta
-      restaurantB = await prisma.restaurant.create({
+      restaurantB = await createRestaurantWithSubscription({
         data: {
           name: `Beta Bistro ${timestamp}`,
           slug: `beta-${timestamp}`,

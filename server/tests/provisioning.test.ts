@@ -1,6 +1,7 @@
 import request from 'supertest';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import './setup';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { ProvisioningStatus, Role } from '@prisma/client';

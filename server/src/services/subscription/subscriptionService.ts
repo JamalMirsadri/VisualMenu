@@ -93,18 +93,11 @@ export class SubscriptionService {
     }
 
     const now = new Date();
-    const trialDays = plan.trialDays || 0;
-    let trialEndsAt: Date | null = null;
-    let currentPeriodEnd: Date;
-    let initialStatus: SubscriptionStatus = SubscriptionStatus.PENDING;
-
-    if (trialDays > 0) {
-      trialEndsAt = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
-      currentPeriodEnd = trialEndsAt;
-      initialStatus = SubscriptionStatus.ACTIVE;
-    } else {
-      currentPeriodEnd = this.calculateNextPeriodEnd(now, plan.billingInterval, plan.intervalCount);
-    }
+    // A subscription must NEVER become ACTIVE automatically. It always starts PENDING
+    // and is only activated through the explicit payment / manual-assignment flow.
+    const currentPeriodEnd = this.calculateNextPeriodEnd(now, plan.billingInterval, plan.intervalCount);
+    const initialStatus: SubscriptionStatus = SubscriptionStatus.PENDING;
+    const trialEndsAt: Date | null = null;
 
     const subscription = await prisma.$transaction(async (tx) => {
       const sub = await tx.subscription.create({
@@ -377,55 +370,6 @@ export class SubscriptionService {
       title: 'Subscription Renewed',
       message: `Your ${updated.plan.name} subscription was successfully renewed until ${updated.currentPeriodEnd.toLocaleDateString()}.`,
       severity: NotificationSeverity.INFO,
-    });
-
-    return updated;
-  }
-
-  /**
-   * Cancel auto-renew (remains ACTIVE until currentPeriodEnd)
-   */
-  static async cancelAutoRenew(subscriptionId: string, actorId?: string, reason?: string) {
-    const sub = await prisma.subscription.findUnique({
-      where: { id: subscriptionId },
-      include: { plan: true },
-    });
-
-    if (!sub) {
-      throw new Error('SUBSCRIPTION_NOT_FOUND');
-    }
-
-    const updated = await prisma.$transaction(async (tx) => {
-      const s = await tx.subscription.update({
-        where: { id: subscriptionId },
-        data: {
-          autoRenew: false,
-          cancelledAt: new Date(),
-        },
-        include: { plan: true },
-      });
-
-      await tx.subscriptionEvent.create({
-        data: {
-          subscriptionId,
-          eventType: 'SUBSCRIPTION_CANCELLED',
-          fromStatus: sub.status,
-          toStatus: sub.status, // Stays active until period end
-          actorId: actorId || null,
-          reason: reason || 'Auto-renew cancelled by user',
-        },
-      });
-
-      return s;
-    });
-
-    await AuditService.log({
-      restaurantId: updated.restaurantId,
-      userId: actorId,
-      action: AuditAction.SUBSCRIPTION_CANCELLED,
-      entityType: 'Subscription',
-      entityId: updated.id,
-      newValues: { autoRenew: false },
     });
 
     return updated;

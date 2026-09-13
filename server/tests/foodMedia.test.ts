@@ -1,4 +1,6 @@
 import request from 'supertest';
+import './setup';
+import { createRestaurantWithSubscription } from './helpers';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { MediaService } from '../src/services/mediaService';
@@ -51,7 +53,7 @@ async function runFoodMediaTests() {
       where: { slug: 'aura-dining' },
     });
     if (!restaurant) {
-      restaurant = await prisma.restaurant.create({
+      restaurant = await createRestaurantWithSubscription({
         data: {
           name: 'Aura Dining Test',
           slug: 'aura-dining',

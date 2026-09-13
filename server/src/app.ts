@@ -27,11 +27,25 @@ import { errorHandler } from './middleware/errorHandler';
 import { authenticateToken } from './middleware/authMiddleware';
 import { requireActiveSubscription } from './middleware/subscriptionMiddleware';
 import { requestLogger } from './middleware/requestLogger';
+import { getAllowedOrigins } from './config';
 
 export const app = express();
 
 // Middleware
-app.use(cors());
+const allowedOrigins = getAllowedOrigins();
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Allow same-origin / non-browser requests (no Origin header) and any allowlisted origin.
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('CORS origin not allowed'));
+      }
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use(requestLogger);

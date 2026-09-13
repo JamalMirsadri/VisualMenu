@@ -1,6 +1,7 @@
 import http from 'http';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
+import './setup';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import {

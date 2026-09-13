@@ -4,7 +4,7 @@ import { Role, PlatformRole } from '@prisma/client';
 import { prisma } from '../prisma';
 import { Permission, hasPermission } from '../constants/permissions';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'aura_super_secure_jwt_secret_dev_2026_key';
+import { getJwtSecret } from '../config';
 
 export interface AuthUser {
   id: string;
@@ -42,7 +42,7 @@ export async function authenticateToken(req: Request, res: Response, next: NextF
   }
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as { userId: string; email: string };
+    const payload = jwt.verify(token, getJwtSecret()) as { userId: string; email: string };
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
       select: { id: true, email: true, name: true, active: true, platformRole: true },

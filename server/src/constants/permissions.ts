@@ -141,6 +141,12 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     label: 'Mark Order Completed',
     description: 'Complete the dining session after service and payment settlement.',
   },
+  {
+    key: 'ASSIGN_ORDERS',
+    group: 'Orders',
+    label: 'Assign Orders',
+    description: 'Assign, claim, or reassign orders to specific waiters on the floor.',
+  },
 
   // KITCHEN
   {
@@ -193,6 +199,18 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     label: 'Manage Table QR Codes',
     description: 'Generate, download, and configure dynamic table QR codes.',
   },
+  {
+    key: 'VIEW_FLOOR',
+    group: 'Tables',
+    label: 'View Floor',
+    description: 'View the live dining room floor plan and table operational states.',
+  },
+  {
+    key: 'TRANSFER_TABLE',
+    group: 'Tables',
+    label: 'Transfer Table',
+    description: 'Transfer or merge active orders between dining tables.',
+  },
 
   // MENU
   {
@@ -230,6 +248,12 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     group: 'Menu',
     label: 'Toggle Dish Availability',
     description: '86 or un-86 items in real time when ingredients run out.',
+  },
+  {
+    key: 'TOGGLE_AVAILABILITY',
+    group: 'Menu',
+    label: 'Toggle Availability (Legacy)',
+    description: 'Legacy alias for toggling dish availability in real time.',
   },
 
   // MEDIA
@@ -355,6 +379,12 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     label: 'Manage Staff Permissions',
     description: 'Customize individual permissions across the matrix for employees.',
   },
+  {
+    key: 'MANAGE_USERS',
+    group: 'Staff',
+    label: 'Manage Users (Legacy)',
+    description: 'Legacy alias for managing staff members and their permissions.',
+  },
 
   // RESTAURANT SETTINGS
   {
@@ -368,6 +398,12 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     group: 'Restaurant Settings',
     label: 'Manage Restaurant Settings',
     description: 'Update restaurant legal identity, contact info, service charge, and operational policies.',
+  },
+  {
+    key: 'MANAGE_RESTAURANT',
+    group: 'Restaurant Settings',
+    label: 'Manage Restaurant (Legacy)',
+    description: 'Legacy alias for managing restaurant settings and identity.',
   },
 
   // BRANDING

@@ -3,7 +3,11 @@ dotenv.config();
 
 import { app } from './app';
 import { prisma } from './prisma';
+import { getJwtSecret } from './config';
 import { SubscriptionScheduler } from './services/subscription/subscriptionScheduler';
+
+// Fail fast if JWT_SECRET is missing (no insecure fallback).
+getJwtSecret();
 
 const PORT = process.env.PORT || 3001;
 

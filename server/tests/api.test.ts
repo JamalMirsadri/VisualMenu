@@ -1,4 +1,6 @@
 import request from 'supertest';
+import './setup';
+import { ensureActiveSubscription } from './helpers';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { Role } from '@prisma/client';
@@ -139,6 +141,7 @@ async function runTests() {
         });
       if (resA.status !== 201) throw new Error(`Restaurant A creation failed: ${JSON.stringify(resA.body)}`);
       testRestAId = resA.body.data.id;
+      await ensureActiveSubscription(testRestAId);
 
       const ownerUser = await prisma.user.findUnique({ where: { email: 'owner@auradining.com' } });
       if (ownerUser) {
@@ -161,6 +164,7 @@ async function runTests() {
         });
       if (resB.status !== 201) throw new Error(`Restaurant B creation failed: ${JSON.stringify(resB.body)}`);
       testRestBId = resB.body.data.id;
+      await ensureActiveSubscription(testRestBId);
 
       if (ownerUser) {
         await prisma.userRestaurant.create({
@@ -704,6 +708,7 @@ async function runTests() {
         throw new Error(`Failed to create restaurant: ${JSON.stringify(res.body)}`);
       }
       createdTenantId = res.body.data.id;
+      await ensureActiveSubscription(createdTenantId);
       if (!res.body.data.active) {
         throw new Error('New restaurant should default to active');
       }

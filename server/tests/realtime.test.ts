@@ -1,5 +1,7 @@
 import http from 'http';
 import request from 'supertest';
+import './setup';
+import { createRestaurantWithSubscription } from './helpers';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { realtimeService } from '../src/services/realtimeService';
@@ -159,7 +161,7 @@ async function runRealtimeTests() {
     });
     staffToken = ownerLogin.body.data.token;
 
-    const restA = await prisma.restaurant.create({
+    const restA = await createRestaurantWithSubscription({
       data: {
         name: 'Realtime Bistro Alpha',
         slug: `rt-bistro-alpha-${Date.now()}`,
@@ -184,7 +186,7 @@ async function runRealtimeTests() {
       });
     }
 
-    const restB = await prisma.restaurant.create({
+    const restB = await createRestaurantWithSubscription({
       data: {
         name: 'Realtime Bistro Beta',
         slug: `rt-bistro-beta-${Date.now()}`,

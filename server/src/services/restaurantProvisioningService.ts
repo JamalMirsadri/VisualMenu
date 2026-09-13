@@ -5,7 +5,7 @@ import { AuditAction, PlatformRole, ProvisioningStatus, Role, SubscriptionStatus
 import { prisma } from '../prisma';
 import { AuditService } from './auditService';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'aura_super_secure_jwt_secret_dev_2026_key';
+import { getJwtSecret } from '../config';
 
 export interface ProvisionRestaurantInput {
   name: string;
@@ -728,7 +728,7 @@ export class RestaurantProvisioningService {
         email: user.email,
         name: user.name,
       },
-      JWT_SECRET,
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 

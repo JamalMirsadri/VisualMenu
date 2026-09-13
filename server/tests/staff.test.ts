@@ -1,6 +1,8 @@
 import request from 'supertest';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import './setup';
+import { createRestaurantWithSubscription } from './helpers';
 import { app } from '../src/app';
 import { prisma } from '../src/prisma';
 import { Role, StaffStatus, AuditAction } from '@prisma/client';
@@ -88,7 +90,7 @@ async function runStaffTests() {
         },
       });
 
-      restaurantA = await prisma.restaurant.create({
+      restaurantA = await createRestaurantWithSubscription({
         data: {
           name: `Bistro Alpha ${timestamp}`,
           slug: `bistro-alpha-${timestamp}`,
@@ -122,7 +124,7 @@ async function runStaffTests() {
         },
       });
 
-      restaurantB = await prisma.restaurant.create({
+      restaurantB = await createRestaurantWithSubscription({
         data: {
           name: `Lounge Beta ${timestamp}`,
           slug: `lounge-beta-${timestamp}`,
