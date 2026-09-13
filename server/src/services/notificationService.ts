@@ -33,6 +33,8 @@ export interface ListNotificationOptions {
   source?: NotificationSource;
   priority?: NotificationPriority;
   unreadOnly?: boolean;
+  pinnedOnly?: boolean;
+  unacknowledgedOnly?: boolean;
   search?: string;
   includeExpired?: boolean;
 }
@@ -87,7 +89,7 @@ export class NotificationService {
     });
 
     try {
-      realtimeService.broadcastToRestaurant(input.restaurantId, 'notification_created' as any, {
+      const payload = {
         id: notification.id,
         restaurantId: notification.restaurantId,
         type: notification.type,
@@ -99,7 +101,11 @@ export class NotificationService {
         pinned: notification.pinned,
         expiresAt: notification.expiresAt?.toISOString() || null,
         createdAt: notification.createdAt.toISOString(),
-      });
+      };
+
+      realtimeService.broadcastToRestaurant(input.restaurantId, 'notification_created' as any, payload);
+      realtimeService.broadcastToRestaurant(input.restaurantId, 'notification' as any, payload);
+      realtimeService.broadcastToRestaurant(input.restaurantId, 'platform_message' as any, payload);
     } catch {
       // Non-blocking realtime broadcast
     }
@@ -121,35 +127,58 @@ export class NotificationService {
 
     const now = new Date();
 
+    const andConditions: Prisma.NotificationWhereInput[] = [
+      { restaurantId },
+      { archivedAt: null },
+    ];
+
+    if (userId) {
+      andConditions.push({
+        OR: [{ userId: null }, { userId }],
+      });
+    }
+
+    if (options.type) {
+      andConditions.push({ type: options.type });
+    }
+
+    if (options.source) {
+      andConditions.push({ source: options.source });
+    }
+
+    if (options.priority) {
+      andConditions.push({ priority: options.priority });
+    }
+
+    if (options.unreadOnly) {
+      andConditions.push({ readAt: null });
+    }
+
+    if (options.pinnedOnly) {
+      andConditions.push({ pinned: true });
+    }
+
+    if (options.unacknowledgedOnly) {
+      andConditions.push({ acknowledgedAt: null });
+    }
+
+    if (!options.includeExpired) {
+      andConditions.push({
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      });
+    }
+
+    if (options.search && options.search.trim()) {
+      andConditions.push({
+        OR: [
+          { title: { contains: options.search.trim(), mode: 'insensitive' } },
+          { message: { contains: options.search.trim(), mode: 'insensitive' } },
+        ],
+      });
+    }
+
     const where: Prisma.NotificationWhereInput = {
-      restaurantId,
-      archivedAt: null,
-      ...(userId
-        ? {
-            OR: [{ userId: null }, { userId }],
-          }
-        : {}),
-      ...(options.type ? { type: options.type } : {}),
-      ...(options.source ? { source: options.source } : {}),
-      ...(options.priority ? { priority: options.priority } : {}),
-      ...(options.unreadOnly ? { readAt: null } : {}),
-      ...(options.includeExpired
-        ? {}
-        : {
-            OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-          }),
-      ...(options.search
-        ? {
-            AND: [
-              {
-                OR: [
-                  { title: { contains: options.search, mode: 'insensitive' } },
-                  { message: { contains: options.search, mode: 'insensitive' } },
-                ],
-              },
-            ],
-          }
-        : {}),
+      AND: andConditions,
     };
 
     const [total, items] = await Promise.all([
@@ -195,19 +224,22 @@ export class NotificationService {
    */
   static async getUnreadCount(restaurantId: string, userId?: string): Promise<number> {
     const now = new Date();
-    const where: Prisma.NotificationWhereInput = {
-      restaurantId,
-      readAt: null,
-      archivedAt: null,
-      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-      ...(userId
-        ? {
-            AND: [{ OR: [{ userId: null }, { userId }] }],
-          }
-        : {}),
-    };
+    const andConditions: Prisma.NotificationWhereInput[] = [
+      { restaurantId },
+      { readAt: null },
+      { archivedAt: null },
+      { OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+    ];
 
-    return await prisma.notification.count({ where });
+    if (userId) {
+      andConditions.push({
+        OR: [{ userId: null }, { userId }],
+      });
+    }
+
+    return await prisma.notification.count({
+      where: { AND: andConditions },
+    });
   }
 
   /**

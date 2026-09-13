@@ -1,3 +1,4 @@
+import http from 'http';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
 import { app } from '../src/app';
@@ -1062,6 +1063,167 @@ async function runNotificationsTests() {
       });
       if (audits.length < 5) {
         throw new Error(`Expected at least 5 audit log entries, found ${audits.length}`);
+      }
+    });
+
+    // =========================================================================
+    // SECTION 7: END-TO-END DELIVERY & NOTIFICATION CENTER INTEGRITY (Tests 66-70)
+    // =========================================================================
+    await assert('66. Single restaurant platform message appears in /api/notifications/restaurant/:id and unread-count increments', async () => {
+      const countBeforeRes = await request(app)
+        .get(`/api/notifications/restaurant/${restaurantA.id}/unread-count`)
+        .set('Authorization', `Bearer ${userAToken}`);
+      const countBefore = countBeforeRes.body.data.count;
+
+      const postRes = await request(app)
+        .post('/api/platform/messages')
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({
+          title: `Direct Alert ${timestamp}`,
+          body: 'Targeted single alert for tenant A',
+          targetType: 'RESTAURANT',
+          targetRestaurantIds: [restaurantA.id],
+          priority: 'HIGH',
+        });
+      if (postRes.status !== 201) throw new Error(`Failed to post single message: ${postRes.status}`);
+      testMessageIdsToClean.push(postRes.body.data.id);
+
+      // Verify notification in inbox
+      const inboxRes = await request(app)
+        .get(`/api/notifications/restaurant/${restaurantA.id}`)
+        .set('Authorization', `Bearer ${userAToken}`);
+      const found = inboxRes.body.data.items.find((item: any) => item.title === `Direct Alert ${timestamp}`);
+      if (!found) throw new Error('Direct platform alert was not found in restaurant inbox');
+
+      // Verify unread count incremented
+      const countAfterRes = await request(app)
+        .get(`/api/notifications/restaurant/${restaurantA.id}/unread-count`)
+        .set('Authorization', `Bearer ${userAToken}`);
+      if (countAfterRes.body.data.count !== countBefore + 1) {
+        throw new Error(`Expected unread count to increment to ${countBefore + 1}, got ${countAfterRes.body.data.count}`);
+      }
+    });
+
+    await assert('67. Multi-restaurant delivery delivers to targeted restaurants with tenant isolation', async () => {
+      const multiPost = await request(app)
+        .post('/api/platform/messages')
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({
+          title: `Multi Alert ${timestamp}`,
+          body: 'Shared notice for A and B',
+          targetType: 'MULTIPLE_RESTAURANTS',
+          targetRestaurantIds: [restaurantA.id, restaurantB.id],
+          priority: 'NORMAL',
+        });
+      if (multiPost.status !== 201) throw new Error(`Failed multi post: ${multiPost.status}`);
+      testMessageIdsToClean.push(multiPost.body.data.id);
+
+      // Verify tenant A sees it
+      const inboxA = await request(app)
+        .get(`/api/notifications/restaurant/${restaurantA.id}`)
+        .set('Authorization', `Bearer ${userAToken}`);
+      const hasA = inboxA.body.data.items.some((i: any) => i.title === `Multi Alert ${timestamp}`);
+      if (!hasA) throw new Error('Tenant A did not receive multi-target message');
+
+      // Verify tenant B sees it
+      const inboxB = await request(app)
+        .get(`/api/notifications/restaurant/${restaurantB.id}`)
+        .set('Authorization', `Bearer ${userBToken}`);
+      const hasB = inboxB.body.data.items.some((i: any) => i.title === `Multi Alert ${timestamp}`);
+      if (!hasB) throw new Error('Tenant B did not receive multi-target message');
+    });
+
+    await assert('68. Broadcast ALL_RESTAURANTS appears in active restaurant inboxes', async () => {
+      const allPost = await request(app)
+        .post('/api/platform/messages')
+        .set('Authorization', `Bearer ${platformAdminToken}`)
+        .send({
+          title: `All Broadcast ${timestamp}`,
+          body: 'Platform-wide broadcast',
+          targetType: 'ALL_RESTAURANTS',
+          confirmAll: true,
+          priority: 'NORMAL',
+        });
+      if (allPost.status !== 201) throw new Error(`Failed broadcast post: ${allPost.status}`);
+      testMessageIdsToClean.push(allPost.body.data.id);
+
+      const inboxA = await request(app)
+        .get(`/api/notifications/restaurant/${restaurantA.id}`)
+        .set('Authorization', `Bearer ${userAToken}`);
+      const hasA = inboxA.body.data.items.some((i: any) => i.title === `All Broadcast ${timestamp}`);
+      if (!hasA) throw new Error('Tenant A did not receive broadcast');
+    });
+
+    await assert('69. Re-dispatching message delivery does NOT produce duplicate notifications (Idempotency)', async () => {
+      const msg = await PlatformMessageService.createMessage(
+        {
+          title: `Idempotency Test ${timestamp}`,
+          body: 'Deduplication guarantee test',
+          targetType: 'RESTAURANT',
+          restaurantIds: [restaurantA.id],
+          priority: 'NORMAL',
+        },
+        platformAdminUser.id
+      );
+      testMessageIdsToClean.push(msg.id);
+
+      // First dispatch verified:
+      const initialCount = await prisma.notification.count({
+        where: { platformMessageId: msg.id, restaurantId: restaurantA.id },
+      });
+      if (initialCount !== 1) throw new Error(`Expected 1 notification, found ${initialCount}`);
+
+      // Re-invoke dispatch internally to simulate retry / duplicate send
+      await (PlatformMessageService as any).dispatchMessageDelivery(msg.id, [restaurantA.id], { id: platformAdminUser.id });
+
+      const recheckCount = await prisma.notification.count({
+        where: { platformMessageId: msg.id, restaurantId: restaurantA.id },
+      });
+      if (recheckCount !== 1) throw new Error(`Duplicate notification was created! Found ${recheckCount}`);
+    });
+
+    await assert('70. Real-time SSE routes accept both /events and /orders/stream aliases', async () => {
+      const server = http.createServer(app);
+      await new Promise<void>((resolve) => server.listen(0, resolve));
+      const port = (server.address() as any).port;
+
+      const testSse = (urlPath: string) => {
+        return new Promise<void>((resolve, reject) => {
+          const req = http.request({
+            hostname: '127.0.0.1',
+            port,
+            path: urlPath,
+            method: 'GET',
+            headers: { Accept: 'text/event-stream' },
+          });
+
+          req.on('response', (res) => {
+            const contentType = res.headers['content-type'] || '';
+            const status = res.statusCode;
+            req.destroy();
+            if (status === 200 && contentType.includes('text/event-stream')) {
+              resolve();
+            } else {
+              reject(new Error(`Expected 200 text/event-stream, got ${status} (${contentType})`));
+            }
+          });
+
+          req.on('error', (err: any) => {
+            if (err.code === 'ECONNRESET') {
+              return;
+            }
+            reject(err);
+          });
+
+          req.end();
+        });
+      };
+
+      try {
+        await testSse(`/api/restaurants/${restaurantA.id}/events?token=${encodeURIComponent(userAToken)}`);
+        await testSse(`/api/restaurants/${restaurantA.id}/orders/stream?token=${encodeURIComponent(userAToken)}`);
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
       }
     });
   } catch (globalErr) {

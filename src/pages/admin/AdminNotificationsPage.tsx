@@ -81,6 +81,38 @@ export const AdminNotificationsPage: React.FC = () => {
     loadNotifications();
   }, [activeRestaurant?.id, page, activeTab, typeFilter]);
 
+  // Real-time SSE listener for instant notification delivery without refresh
+  useEffect(() => {
+    if (!activeRestaurant?.id) return;
+
+    let es: EventSource | null = null;
+    try {
+      const token = localStorage.getItem('aura_admin_token') || localStorage.getItem('token') || '';
+      const baseUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '');
+      const sseUrl = `${baseUrl}/restaurants/${activeRestaurant.id}/events${
+        token ? `?token=${encodeURIComponent(token)}` : ''
+      }`;
+      es = new EventSource(sseUrl);
+
+      const handleEvent = () => {
+        loadNotifications();
+      };
+
+      es.addEventListener('notification', handleEvent);
+      es.addEventListener('notification_created', handleEvent);
+      es.addEventListener('platform_message', handleEvent);
+      es.addEventListener('NOTIFICATION_CREATED', handleEvent);
+      es.addEventListener('NOTIFICATION', handleEvent);
+      es.addEventListener('PLATFORM_MESSAGE', handleEvent);
+    } catch {
+      // Fallback gracefully
+    }
+
+    return () => {
+      if (es) es.close();
+    };
+  }, [activeRestaurant?.id, page, activeTab, typeFilter]);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);

@@ -9,12 +9,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'aura_super_secure_jwt_secret_dev_2
 
 /**
  * GET /api/restaurants/:restaurantId/events
- * Real-time SSE endpoint for Restaurant Staff, Orders Studio & Kitchen KDS.
+ * GET /api/restaurants/:restaurantId/orders/stream
+ * Real-time SSE endpoint for Restaurant Staff, Orders Studio, Kitchen KDS & Notifications.
  * Supports token via query param `?token=` (standard EventSource) or Bearer header.
  */
-realtimeRouter.get(
-  '/restaurants/:restaurantId/events',
-  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+const handleRestaurantStream = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { restaurantId } = req.params;
 
@@ -48,41 +47,61 @@ realtimeRouter.get(
         return;
       }
 
-      // Verify user membership in this restaurant
-      const membership = await prisma.userRestaurant.findUnique({
-        where: {
-          userId_restaurantId: {
-            userId,
-            restaurantId,
-          },
-        },
+      // Check if user is active and whether they are a platform admin
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, active: true, platformRole: true },
       });
 
-      if (!membership) {
-        res.status(403).json({
+      if (!user || !user.active) {
+        res.status(401).json({
           success: false,
-          errorCode: 'RESTAURANT_ACCESS_DENIED',
-          message: 'You are not assigned to this restaurant tenant.',
+          errorCode: 'INVALID_TOKEN',
+          message: 'User account not found or deactivated.',
         });
         return;
       }
 
-      if (membership.status === 'DISABLED') {
-        res.status(403).json({
-          success: false,
-          errorCode: 'STAFF_DISABLED',
-          message: 'Your access to this restaurant has been disabled by management.',
+      // Platform Admins have tenant-wide observation access
+      if (user.platformRole !== 'PLATFORM_ADMIN') {
+        // Verify user membership in this restaurant
+        const membership = await prisma.userRestaurant.findUnique({
+          where: {
+            userId_restaurantId: {
+              userId,
+              restaurantId,
+            },
+          },
         });
-        return;
+
+        if (!membership) {
+          res.status(403).json({
+            success: false,
+            errorCode: 'RESTAURANT_ACCESS_DENIED',
+            message: 'You are not assigned to this restaurant tenant.',
+          });
+          return;
+        }
+
+        if (membership.status === 'DISABLED') {
+          res.status(403).json({
+            success: false,
+            errorCode: 'STAFF_DISABLED',
+            message: 'Your access to this restaurant has been disabled by management.',
+          });
+          return;
+        }
       }
 
       // Connect client to restaurant channel
       realtimeService.subscribe(`restaurant:${restaurantId}`, res);
     } catch (err) {
       next(err);
-    }
   }
-);
+};
+
+realtimeRouter.get('/restaurants/:restaurantId/events', handleRestaurantStream);
+realtimeRouter.get('/restaurants/:restaurantId/orders/stream', handleRestaurantStream);
 
 /**
  * GET /api/orders/track/:publicOrderToken/events

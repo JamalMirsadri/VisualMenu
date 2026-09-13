@@ -40,8 +40,9 @@ export const NotificationBell: React.FC = () => {
     let es: EventSource | null = null;
     if (activeRestaurant?.id) {
       try {
-        const token = localStorage.getItem('token');
-        const sseUrl = `/api/restaurants/${activeRestaurant.id}/orders/stream${
+        const token = localStorage.getItem('aura_admin_token') || localStorage.getItem('token') || '';
+        const baseUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '');
+        const sseUrl = `${baseUrl}/restaurants/${activeRestaurant.id}/events${
           token ? `?token=${encodeURIComponent(token)}` : ''
         }`;
         es = new EventSource(sseUrl);
@@ -50,7 +51,11 @@ export const NotificationBell: React.FC = () => {
           if (isOpen) fetchRecent();
         };
         es.addEventListener('notification', handleEvent);
+        es.addEventListener('notification_created', handleEvent);
         es.addEventListener('platform_message', handleEvent);
+        es.addEventListener('NOTIFICATION_CREATED', handleEvent);
+        es.addEventListener('NOTIFICATION', handleEvent);
+        es.addEventListener('PLATFORM_MESSAGE', handleEvent);
       } catch {
         // Fallback gracefully
       }

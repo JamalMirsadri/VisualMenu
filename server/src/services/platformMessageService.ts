@@ -228,6 +228,9 @@ export class PlatformMessageService {
 
     const uniqueRestaurantIds = Array.from(new Set(restaurantIds));
 
+    const rawActorId = typeof actorUser === 'string' ? actorUser : actorUser?.id || message.senderUserId;
+    const actorUserId = rawActorId && rawActorId.trim() ? rawActorId.trim() : null;
+
     // Batch insert recipients and tenant notifications transactionally
     for (const restaurantId of uniqueRestaurantIds) {
       try {
@@ -249,26 +252,35 @@ export class PlatformMessageService {
           },
         });
 
-        // Create tenant notification
-        const notification = await prisma.notification.create({
-          data: {
-            restaurantId,
-            type: NotificationType.PLATFORM_MESSAGE,
-            source: NotificationSource.PLATFORM,
-            priority: message.priority,
-            title: message.title,
-            message: message.message,
-            severity,
-            pinned: message.priority === NotificationPriority.URGENT,
-            expiresAt: message.expiresAt,
+        // Ensure idempotency: check if tenant notification already exists
+        let notification = await prisma.notification.findFirst({
+          where: {
             platformMessageId: message.id,
-            createdByUserId: actorUser?.id || message.senderUserId,
+            restaurantId,
           },
         });
 
-        // Emit real-time SSE event to restaurant channel
+        if (!notification) {
+          notification = await prisma.notification.create({
+            data: {
+              restaurantId,
+              type: NotificationType.PLATFORM_MESSAGE,
+              source: NotificationSource.PLATFORM,
+              priority: message.priority,
+              title: message.title,
+              message: message.message,
+              severity,
+              pinned: message.priority === NotificationPriority.URGENT,
+              expiresAt: message.expiresAt,
+              platformMessageId: message.id,
+              createdByUserId: actorUserId,
+            },
+          });
+        }
+
+        // Emit real-time SSE event to restaurant channel with all recognized event names
         try {
-          realtimeService.broadcastToRestaurant(restaurantId, 'notification_created' as any, {
+          const payload = {
             id: notification.id,
             restaurantId,
             type: notification.type,
@@ -280,7 +292,11 @@ export class PlatformMessageService {
             pinned: notification.pinned,
             expiresAt: notification.expiresAt?.toISOString() || null,
             createdAt: notification.createdAt.toISOString(),
-          });
+          };
+
+          realtimeService.broadcastToRestaurant(restaurantId, 'notification_created' as any, payload);
+          realtimeService.broadcastToRestaurant(restaurantId, 'notification' as any, payload);
+          realtimeService.broadcastToRestaurant(restaurantId, 'platform_message' as any, payload);
         } catch {
           // Realtime notification failure is non-blocking
         }

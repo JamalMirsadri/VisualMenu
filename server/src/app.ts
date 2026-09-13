@@ -76,8 +76,8 @@ app.use('/api/menu', publicMenuRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/owner', ownerInvitationRouter);
 app.use('/api/staff', staffInvitationRouter);
-app.use('/api', orderRouter); // Includes public POST /api/orders, cash settlement, receipts and customer order tracking
 app.use('/api', realtimeRouter); // Includes public /orders/track/:token/events and protected SSE
+app.use('/api', orderRouter); // Includes public POST /api/orders, cash settlement, receipts and customer order tracking
 app.use('/api', paymentRouter); // Includes public /payments, /payments/:id, webhooks and protected admin /restaurants/:id/payments
 app.use('/api', customerRouter); // Includes public fiscal profile save and protected admin customer directory
 
