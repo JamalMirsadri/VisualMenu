@@ -326,6 +326,14 @@ export const ownerInvitationService = {
   async acceptInvitation(token: string, data: { password: string; name?: string }): Promise<any> {
     const res = await apiClient.post<any>(`/owner/invitations/${token}/accept`, data);
     const dataResult = unwrapResponse<any>(res);
+
+    // Persist the session with the canonical auth keys (mirrors staff onboarding),
+    // so the newly-activated owner is authenticated on the next client load.
+    if (dataResult?.token && typeof window !== 'undefined') {
+      window.localStorage.setItem('aura_admin_token', dataResult.token);
+      window.localStorage.setItem('aura_admin_user', JSON.stringify(dataResult.user));
+    }
+
     return { data: dataResult, ...(dataResult && typeof dataResult === 'object' ? dataResult : {}) };
   },
 };

@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { SubscriptionStatus } from '@prisma/client';
 import { prisma } from '../prisma';
+import { isValidUuid } from './validation';
 
 import { getJwtSecret } from '../config';
 
@@ -70,6 +71,17 @@ export function requireActiveSubscription() {
     // If no restaurant context could be determined, allow downstream middleware to handle 400/403
     if (!restaurantId) {
       next();
+      return;
+    }
+
+    // Reject non-UUID tenant identifiers before they reach Prisma's UUID parser.
+    // A slug/email/name must never be passed as a restaurant UUID.
+    if (!isValidUuid(restaurantId)) {
+      res.status(400).json({
+        success: false,
+        errorCode: 'INVALID_RESTAURANT_ID',
+        message: 'Restaurant identifier must be a valid UUID.',
+      });
       return;
     }
 

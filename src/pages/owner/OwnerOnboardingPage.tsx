@@ -20,7 +20,7 @@ import { useAuth } from '../../context/AuthContext';
 export const OwnerOnboardingPage: React.FC = () => {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const { loginWithToken } = useAuth() as any; // Context helper
+  const { refreshProfile } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,13 +79,12 @@ export const OwnerOnboardingPage: React.FC = () => {
         name: ownerName.trim() || undefined,
       });
 
-      // Save token and restaurant context in localStorage
+      // The session token/user are now stored under the canonical auth keys by
+      // ownerInvitationService.acceptInvitation. Refresh the auth context so the
+      // active restaurant is resolved from the real membership before redirect.
       const session = res?.data ?? res;
       if (session?.token) {
-        localStorage.setItem('auth_token', session.token);
-        if (loginWithToken) {
-          await loginWithToken(session.token, session.user);
-        }
+        await refreshProfile();
       }
 
       setStep(3); // Setup tour / ready state

@@ -32,6 +32,7 @@
     "test:admin-loading": "tsx server/tests/adminLoadingStates.test.ts",
     "test:floor-rendering": "tsx server/tests/floorRendering.test.ts",
     "test:media-upload": "tsx server/tests/mediaUploadModal.test.ts",
+    "test:restaurant-lifecycle": "tsx server/tests/restaurantLifecycle.test.ts",
     "lint": "oxlint",
     "preview": "vite preview"
   },
