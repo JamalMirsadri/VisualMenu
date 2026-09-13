@@ -230,7 +230,7 @@ paymentRouter.post(
 // ADMIN / STAFF PAYMENT OPERATIONS
 // =============================================================================
 
-paymentRouter.use('/restaurants/:id', authenticateToken, requireActiveSubscription());
+paymentRouter.use('/restaurants/:id', authenticateToken, validateUuidParams('id'), requireActiveSubscription());
 
 /**
  * GET /api/restaurants/:id/payments

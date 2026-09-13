@@ -97,8 +97,13 @@ export class StandardFiscalProvider implements FiscalProvider {
         .update(`${restaurantId}:${series}:${nextSequence}:${order.total}:${order.customerTaxId || 'NONE'}`)
         .digest('hex');
 
-      const mergedMetadata = {
-        ...(metadata || {}),
+      const metadataObject: Prisma.InputJsonObject =
+        metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+          ? (metadata as Prisma.InputJsonObject)
+          : {};
+
+      const mergedMetadata: Prisma.InputJsonObject = {
+        ...metadataObject,
         hash,
         issuedVia: 'StandardFiscalProvider',
       };

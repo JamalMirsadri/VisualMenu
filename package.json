@@ -33,6 +33,9 @@
     "test:floor-rendering": "tsx server/tests/floorRendering.test.ts",
     "test:media-upload": "tsx server/tests/mediaUploadModal.test.ts",
     "test:restaurant-lifecycle": "tsx server/tests/restaurantLifecycle.test.ts",
+    "test:identifier-contract": "tsx server/tests/restaurantIdentifierContract.test.ts",
+    "test:stabilization": "tsx server/tests/productionStabilization.test.ts",
+    "db:verify-uuid": "tsx server/scripts/verifyUuidColumns.ts",
     "lint": "oxlint",
     "preview": "vite preview"
   },

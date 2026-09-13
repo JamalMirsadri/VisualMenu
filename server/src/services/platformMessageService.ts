@@ -210,7 +210,7 @@ export class PlatformMessageService {
   private static async dispatchMessageDelivery(
     messageId: string,
     restaurantIds: string[],
-    actorUser?: { id: string }
+    actorUser?: { id: string } | string
   ) {
     const message = await prisma.platformMessage.findUnique({
       where: { id: messageId },
@@ -315,7 +315,7 @@ export class PlatformMessageService {
     });
 
     await AuditService.log({
-      userId: actorUser?.id || message.senderUserId || null,
+      userId: (typeof actorUser === 'string' ? actorUser : actorUser?.id) || message.senderUserId || null,
       action: AuditAction.PLATFORM_MESSAGE_SENT,
       entityType: 'PlatformMessage',
       entityId: message.id,

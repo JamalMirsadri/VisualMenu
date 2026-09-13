@@ -1184,6 +1184,14 @@ async function runNotificationsTests() {
     });
 
     await assert('70. Real-time SSE routes accept both /events and /orders/stream aliases', async () => {
+      // SSE now enforces an ACTIVE/GRACE_PERIOD subscription; restaurant A was set
+      // to EXPIRED in test 62, so restore an ACTIVE subscription to exercise the
+      // alias acceptance path (not the subscription-gating path).
+      await prisma.subscription.updateMany({
+        where: { restaurantId: restaurantA.id },
+        data: { status: SubscriptionStatus.ACTIVE },
+      });
+
       const server = http.createServer(app);
       await new Promise<void>((resolve) => server.listen(0, resolve));
       const port = (server.address() as any).port;

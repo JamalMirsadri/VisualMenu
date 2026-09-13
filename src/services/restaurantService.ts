@@ -19,8 +19,12 @@ export const restaurantService = {
     return apiClient.get<Restaurant[]>('/restaurants');
   },
 
+  getById(id: string): Promise<Restaurant> {
+    return apiClient.get<Restaurant>(`/restaurants/${id}`);
+  },
+
   getBySlug(slug: string): Promise<Restaurant> {
-    return apiClient.get<Restaurant>(`/restaurants/${slug}`);
+    return apiClient.get<Restaurant>(`/restaurants/by-slug/${slug}`);
   },
 
   update(id: string, data: Partial<Restaurant>): Promise<Restaurant> {

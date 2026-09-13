@@ -110,7 +110,7 @@ customerRouter.get(
  */
 customerRouter.get(
   '/restaurants/:id/customers/:customerId',
-  validateUuidParams('id', 'customerId'),
+  validateUuidParams(['id', 'customerId']),
   authenticateToken,
   requirePermission('VIEW_CUSTOMERS'),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {

@@ -145,9 +145,9 @@ async function runRestaurantBootstrapTests() {
     }
   });
 
-  assert(10, 'useAdminData: derives slug from activeRestaurant (no demo-restaurant mock fallback)', () => {
-    if (!useAdminData.includes("slug || activeRestaurant?.slug || ''")) {
-      throw new Error('useAdminData does not derive effective slug from activeRestaurant');
+  assert(10, 'useAdminData: resolves the admin restaurant by UUID (no demo-restaurant mock fallback)', () => {
+    if (!useAdminData.includes("activeRestaurant?.id || ''")) {
+      throw new Error('useAdminData does not derive the restaurant UUID from activeRestaurant');
     }
     if (useAdminData.includes('demo-restaurant')) {
       throw new Error('useAdminData still contains demo-restaurant fallback');

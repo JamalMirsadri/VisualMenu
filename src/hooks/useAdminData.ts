@@ -6,9 +6,9 @@ import { mediaService } from '../services/mediaService';
 import { useAuth } from '../context/AuthContext';
 import type { Category, FoodItem, MediaItem, Restaurant } from '../types';
 
-export function useAdminData(slug?: string) {
+export function useAdminData() {
   const { activeRestaurant } = useAuth();
-  const effectiveSlug = slug || activeRestaurant?.slug || '';
+  const restaurantId = activeRestaurant?.id || '';
 
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -18,7 +18,7 @@ export function useAdminData(slug?: string) {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!effectiveSlug) {
+    if (!restaurantId) {
       setLoading(false);
       setError('No restaurant is assigned to your account.');
       setRestaurant(null);
@@ -31,8 +31,8 @@ export function useAdminData(slug?: string) {
     try {
       setLoading(true);
       setError(null);
-      // Fetch restaurant
-      const rest = await restaurantService.getBySlug(effectiveSlug);
+      // Fetch restaurant by its UUID (tenant identifier), never by slug.
+      const rest = await restaurantService.getById(restaurantId);
       setRestaurant(rest);
 
       // Concurrently fetch categories, foods, and media. Keep whatever loads and
@@ -68,7 +68,7 @@ export function useAdminData(slug?: string) {
     } finally {
       setLoading(false);
     }
-  }, [effectiveSlug]);
+  }, [restaurantId]);
 
   useEffect(() => {
     refresh();

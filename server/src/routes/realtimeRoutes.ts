@@ -1,7 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { SubscriptionStatus } from '@prisma/client';
 import { prisma } from '../prisma';
 import { realtimeService } from '../services/realtimeService';
+import { isValidUuid } from '../middleware/validation';
 import { getJwtSecret } from '../config';
 
 export const realtimeRouter = Router();
@@ -14,7 +16,18 @@ export const realtimeRouter = Router();
  */
 const handleRestaurantStream = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { restaurantId } = req.params;
+      const rawId = req.params.restaurantId;
+      const restaurantId = Array.isArray(rawId) ? rawId[0] : rawId;
+
+      // Reject non-UUID tenant identifiers before any Prisma lookup.
+      if (!restaurantId || !isValidUuid(restaurantId)) {
+        res.status(400).json({
+          success: false,
+          errorCode: 'INVALID_RESTAURANT_ID',
+          message: 'Restaurant identifier must be a valid UUID.',
+        });
+        return;
+      }
 
       // Extract token from query or Authorization header
       const queryToken = req.query.token as string | undefined;
@@ -61,35 +74,59 @@ const handleRestaurantStream = async (req: Request, res: Response, next: NextFun
         return;
       }
 
-      // Platform Admins have tenant-wide observation access
-      if (user.platformRole !== 'PLATFORM_ADMIN') {
-        // Verify user membership in this restaurant
-        const membership = await prisma.userRestaurant.findUnique({
-          where: {
-            userId_restaurantId: {
-              userId,
-              restaurantId,
-            },
+      // Platform Admins have tenant-wide observation access (no membership/subscription gate)
+      if (user.platformRole === 'PLATFORM_ADMIN') {
+        realtimeService.subscribe(`restaurant:${restaurantId}`, res);
+        return;
+      }
+
+      // Verify user membership in this restaurant
+      const membership = await prisma.userRestaurant.findUnique({
+        where: {
+          userId_restaurantId: {
+            userId,
+            restaurantId,
           },
+        },
+      });
+
+      if (!membership) {
+        res.status(403).json({
+          success: false,
+          errorCode: 'RESTAURANT_ACCESS_DENIED',
+          message: 'You are not assigned to this restaurant tenant.',
         });
+        return;
+      }
 
-        if (!membership) {
-          res.status(403).json({
-            success: false,
-            errorCode: 'RESTAURANT_ACCESS_DENIED',
-            message: 'You are not assigned to this restaurant tenant.',
-          });
-          return;
-        }
+      if (membership.status === 'DISABLED') {
+        res.status(403).json({
+          success: false,
+          errorCode: 'STAFF_DISABLED',
+          message: 'Your access to this restaurant has been disabled by management.',
+        });
+        return;
+      }
 
-        if (membership.status === 'DISABLED') {
-          res.status(403).json({
-            success: false,
-            errorCode: 'STAFF_DISABLED',
-            message: 'Your access to this restaurant has been disabled by management.',
-          });
-          return;
-        }
+      // Enforce an active (or grace-period) subscription before streaming.
+      const subscription = await prisma.subscription.findFirst({
+        where: { restaurantId },
+        orderBy: { createdAt: 'desc' },
+        select: { status: true },
+      });
+
+      if (
+        !subscription ||
+        (subscription.status !== SubscriptionStatus.ACTIVE &&
+          subscription.status !== SubscriptionStatus.GRACE_PERIOD)
+      ) {
+        res.status(402).json({
+          success: false,
+          code: 'SUBSCRIPTION_REQUIRED',
+          errorCode: 'SUBSCRIPTION_REQUIRED',
+          message: 'Active subscription required to access this resource',
+        });
+        return;
       }
 
       // Connect client to restaurant channel
@@ -111,7 +148,8 @@ realtimeRouter.get(
   '/orders/track/:publicOrderToken/events',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { publicOrderToken } = req.params;
+      const rawToken = req.params.publicOrderToken;
+      const publicOrderToken = Array.isArray(rawToken) ? rawToken[0] : rawToken;
 
       const order = await prisma.order.findUnique({
         where: { publicToken: publicOrderToken },

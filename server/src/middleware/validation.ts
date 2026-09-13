@@ -3,16 +3,20 @@ import { prisma } from '../prisma';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function isValidUuid(id?: string): boolean {
-  return typeof id === 'string' && UUID_REGEX.test(id);
+export function isValidUuid(id?: string | string[]): boolean {
+  const value = Array.isArray(id) ? id[0] : id;
+  return typeof value === 'string' && UUID_REGEX.test(value);
 }
 
 /**
- * Validate that params with :id, :restaurantId, or :categoryId are valid UUIDs
+ * Validate that the named route params are valid UUIDs.
+ * Accepts either a single param name or a list of names (historical call sites
+ * used both `'id'` and `['id']`; normalize here so both are honored).
  */
-export function validateUuidParams(paramNames: string[]) {
+export function validateUuidParams(paramNames: string | string[]) {
+  const names = Array.isArray(paramNames) ? paramNames : [paramNames];
   return (req: Request, res: Response, next: NextFunction): void => {
-    for (const param of paramNames) {
+    for (const param of names) {
       const val = req.params[param];
       if (val && !isValidUuid(val)) {
         res.status(400).json({

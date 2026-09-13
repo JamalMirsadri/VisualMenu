@@ -366,7 +366,7 @@ tableRouter.get(
     try {
       const { restaurantId } = req.params;
 
-      const role = (req.user?.role as Role) || Role.STAFF;
+      const role = req.userRole || Role.STAFF;
       const canViewPayments =
         hasPermission(role, 'VIEW_PAYMENTS', req.userPermissions) ||
         hasPermission(role, 'VIEW_PAYMENT_STATUS', req.userPermissions);
@@ -440,7 +440,7 @@ tableRouter.get(
         return;
       }
 
-      const role = (req.user?.role as Role) || Role.STAFF;
+      const role = req.userRole || Role.STAFF;
       const canViewPayments =
         hasPermission(role, 'VIEW_PAYMENTS', req.userPermissions) ||
         hasPermission(role, 'VIEW_PAYMENT_STATUS', req.userPermissions);

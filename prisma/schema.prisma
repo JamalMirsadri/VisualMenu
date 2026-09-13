@@ -326,7 +326,6 @@ model Category {
 
   restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   foods        FoodItem[]
-  translations Translation[]
 
   @@unique([restaurantId, name])
   @@index([restaurantId])
@@ -361,7 +360,6 @@ model FoodItem {
   category     Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   media        Media[]
   orderItems   OrderItem[]
-  translations Translation[]
 
   @@unique([restaurantId, slug])
   @@index([restaurantId])
@@ -906,9 +904,6 @@ model Translation {
   value      String   @db.Text
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
-
-  category Category? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "fk_translation_category")
-  foodItem FoodItem? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "fk_translation_food")
 
   @@unique([entityType, entityId, field, language])
   @@index([entityType, entityId])

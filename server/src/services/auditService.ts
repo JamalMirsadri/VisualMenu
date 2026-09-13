@@ -7,6 +7,7 @@ export interface RecordAuditParams {
   action: AuditAction;
   entityType: string;
   entityId: string;
+  oldValues?: Record<string, any>;
   newValues?: Record<string, any>;
   metadata?: Prisma.InputJsonValue;
 }
@@ -70,7 +71,11 @@ export class AuditService {
    */
   static async log(params: RecordAuditParams) {
     try {
-      const raw = params.metadata || params.newValues || {};
+      const raw =
+        params.metadata ||
+        (params.oldValues
+          ? { oldValues: params.oldValues, newValues: params.newValues }
+          : params.newValues || {});
       const jsonCompatible = JSON.parse(JSON.stringify(raw));
       const safeMetadata = redactSensitiveData(jsonCompatible);
 

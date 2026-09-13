@@ -125,12 +125,12 @@ async function runRestaurantLifecycleTests() {
     if (!authRoutes.includes('slug: ur.restaurant.slug')) throw new Error('login response missing slug: ur.restaurant.slug');
   });
 
-  assert(8, 'activeRestaurant uses the slug only for the by-slug fetch, then the UUID for APIs', () => {
-    if (!useAdminData.includes("slug || activeRestaurant?.slug || ''")) {
-      throw new Error('useAdminData does not derive slug from activeRestaurant');
+  assert(8, 'useAdminData resolves the restaurant by UUID, never by slug', () => {
+    if (!useAdminData.includes("activeRestaurant?.id || ''")) {
+      throw new Error('useAdminData does not derive UUID from activeRestaurant');
     }
-    if (!useAdminData.includes('restaurantService.getBySlug(effectiveSlug)')) {
-      throw new Error('useAdminData does not fetch by slug');
+    if (!useAdminData.includes('restaurantService.getById(restaurantId)')) {
+      throw new Error('useAdminData does not fetch by UUID');
     }
     if (!useAdminData.includes('categoryService.getByRestaurant(rest.id)')) {
       throw new Error('useAdminData does not use restaurant UUID for categories');
@@ -144,12 +144,15 @@ async function runRestaurantLifecycleTests() {
     }
   });
 
-  assert(10, 'subscription middleware rejects a non-UUID restaurantId before membership lookup', () => {
-    if (!subMiddleware.includes('isValidUuid(restaurantId)')) {
-      throw new Error('subscription middleware missing UUID guard');
+  assert(10, 'subscription middleware resolves restaurant via the UUID-validating canonical resolver', () => {
+    // UUID validation now lives in the single canonical resolver (isValidUuid gate),
+    // and validateUuidParams runs before requireActiveSubscription in the mount.
+    if (!subMiddleware.includes('resolveRestaurantId(req)')) {
+      throw new Error('subscription middleware does not use the canonical resolver');
     }
-    if (!subMiddleware.includes('Restaurant identifier must be a valid UUID.')) {
-      throw new Error('subscription middleware missing clear rejection message');
+    const authMiddleware = read('server/src/middleware/authMiddleware.ts');
+    if (!authMiddleware.includes('return target && isValidUuid(target) ? target : null;')) {
+      throw new Error('canonical resolver does not gate on isValidUuid');
     }
   });
 

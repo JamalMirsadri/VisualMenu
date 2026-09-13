@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Role, PlatformRole } from '@prisma/client';
 import { prisma } from '../prisma';
 import { Permission, hasPermission } from '../constants/permissions';
+import { isValidUuid } from './validation';
 
 import { getJwtSecret } from '../config';
 
@@ -141,54 +142,8 @@ export function requireRestaurantAccess(roles?: Role[] | Role) {
     }
 
     try {
-      // 1. Resolve restaurantId from request params, body, or related entity
-      let targetRestaurantId = req.params.restaurantId;
-
-      const fullUrl = `${req.baseUrl || ''}${req.path || ''}`;
-
-      if (!targetRestaurantId && (req.baseUrl.includes('/restaurants') || fullUrl.includes('/restaurants')) && req.params.id) {
-        targetRestaurantId = req.params.id;
-      }
-
-      if (!targetRestaurantId && req.body && req.body.restaurantId) {
-        targetRestaurantId = req.body.restaurantId;
-      }
-
-      // If accessing a specific food item
-      if (!targetRestaurantId && (req.baseUrl.includes('/foods') || fullUrl.includes('/foods')) && req.params.id) {
-        const food = await prisma.foodItem.findUnique({
-          where: { id: req.params.id },
-          select: { restaurantId: true },
-        });
-        if (food) targetRestaurantId = food.restaurantId;
-      }
-
-      // If accessing a specific category
-      if (!targetRestaurantId && (req.baseUrl.includes('/categories') || fullUrl.includes('/categories')) && req.params.id) {
-        const cat = await prisma.category.findUnique({
-          where: { id: req.params.id },
-          select: { restaurantId: true },
-        });
-        if (cat) targetRestaurantId = cat.restaurantId;
-      }
-
-      // If accessing a specific media item
-      if (!targetRestaurantId && (req.baseUrl.includes('/media') || fullUrl.includes('/media')) && req.params.id) {
-        const med = await prisma.media.findUnique({
-          where: { id: req.params.id },
-          select: { restaurantId: true },
-        });
-        if (med) targetRestaurantId = med.restaurantId;
-      }
-
-      // If accessing a specific QR code
-      if (!targetRestaurantId && (req.baseUrl.includes('/qr') || fullUrl.includes('/qr')) && req.params.id) {
-        const qr = await prisma.qrCode.findUnique({
-          where: { id: req.params.id },
-          select: { restaurantId: true },
-        });
-        if (qr) targetRestaurantId = qr.restaurantId;
-      }
+      // 1. Resolve the target restaurant id through the single canonical resolver.
+      let targetRestaurantId = await resolveRestaurantId(req);
 
       if (!targetRestaurantId) {
         // If Platform Admin, they don't have default memberships; target must be explicit or picked
@@ -292,103 +247,95 @@ export function requireRestaurantAccess(roles?: Role[] | Role) {
 }
 
 /**
- * Resolves the target restaurant ID from request params, body, or related entity lookups.
+ * Normalizes an Express 5 route param (typed `string | string[]`) to a single string.
  */
-async function resolveRestaurantId(req: Request): Promise<string | null> {
-  let targetRestaurantId = req.params.restaurantId;
+function asString(value: string | string[] | undefined): string | undefined {
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+/**
+ * Canonical tenant identifier resolver.
+ *
+ * Resolves the target restaurant id from the request in priority order:
+ *   1. explicit `:restaurantId` / `:id` route params
+ *   2. `body.restaurantId`
+ *   3. `query.restaurantId`
+ *   4. `x-restaurant-id` header
+ *   5. `/restaurants/:uuid` URL pattern (needed by mount-level middleware that
+ *      runs before route params are populated)
+ *   6. related-entity lookups (food/order/payment/table/category/media/customer/notification)
+ *
+ * Returns a valid UUID or `null`. A non-UUID (slug/email/name) is never returned
+ * and is never converted — callers treat `null` as "no usable tenant context".
+ */
+export async function resolveRestaurantId(req: Request): Promise<string | null> {
   const fullUrl = `${req.baseUrl || ''}${req.path || ''}`;
 
-  if (!targetRestaurantId && (req.baseUrl.includes('/restaurants') || fullUrl.includes('/restaurants')) && req.params.id) {
-    targetRestaurantId = req.params.id;
+  let target = asString(req.params.restaurantId);
+
+  if (!target && (req.baseUrl.includes('/restaurants') || fullUrl.includes('/restaurants'))) {
+    target = asString(req.params.id);
   }
 
-  if (!targetRestaurantId && req.body && req.body.restaurantId) {
-    targetRestaurantId = req.body.restaurantId;
+  if (!target && req.body && typeof req.body.restaurantId === 'string') {
+    target = req.body.restaurantId;
   }
 
-  if (!targetRestaurantId && req.query && typeof req.query.restaurantId === 'string') {
-    targetRestaurantId = req.query.restaurantId;
+  if (!target && req.query && typeof req.query.restaurantId === 'string') {
+    target = req.query.restaurantId;
   }
 
-  if (!targetRestaurantId && req.headers && typeof req.headers['x-restaurant-id'] === 'string') {
-    targetRestaurantId = req.headers['x-restaurant-id'] as string;
+  if (!target && req.headers && typeof req.headers['x-restaurant-id'] === 'string') {
+    target = req.headers['x-restaurant-id'];
   }
 
-  const candidateId = req.params.id || req.params.foodId || req.params.orderId || req.params.paymentId || req.params.tableId || req.params.customerId || req.params.mediaId || req.params.categoryId || req.params.notificationId;
-
-  // Food Item lookup
-  if (!targetRestaurantId && (req.baseUrl.includes('/foods') || fullUrl.includes('/foods')) && candidateId) {
-    const food = await prisma.foodItem.findUnique({
-      where: { id: candidateId },
-      select: { restaurantId: true },
-    });
-    if (food) targetRestaurantId = food.restaurantId;
+  if (!target) {
+    const match = (req.originalUrl || fullUrl).match(/\/restaurants\/([0-9a-fA-F-]{36})/);
+    if (match) target = match[1];
   }
 
-  // Order lookup
-  if (!targetRestaurantId && (req.baseUrl.includes('/orders') || fullUrl.includes('/orders')) && candidateId) {
-    const order = await prisma.order.findUnique({
-      where: { id: candidateId },
-      select: { restaurantId: true },
-    });
-    if (order) targetRestaurantId = order.restaurantId;
+  const candidateId = asString(
+    req.params.id || req.params.foodId || req.params.orderId || req.params.paymentId ||
+    req.params.tableId || req.params.customerId || req.params.mediaId || req.params.categoryId ||
+    req.params.notificationId
+  );
+
+  // Only perform entity lookups when the candidate id is already a valid UUID,
+  // so a slug/email/name never reaches Prisma's UUID parser.
+  if (!target && candidateId && isValidUuid(candidateId)) {
+    if (req.baseUrl.includes('/foods') || fullUrl.includes('/foods')) {
+      const food = await prisma.foodItem.findUnique({ where: { id: candidateId }, select: { restaurantId: true } });
+      if (food) target = food.restaurantId;
+    } else if (req.baseUrl.includes('/orders') || fullUrl.includes('/orders')) {
+      const order = await prisma.order.findUnique({ where: { id: candidateId }, select: { restaurantId: true } });
+      if (order) target = order.restaurantId;
+    } else if (req.baseUrl.includes('/payments') || fullUrl.includes('/payments')) {
+      const payment = await prisma.payment.findUnique({ where: { id: candidateId }, select: { restaurantId: true } });
+      if (payment) target = payment.restaurantId;
+    } else if (req.baseUrl.includes('/tables') || fullUrl.includes('/tables')) {
+      const table = await prisma.table.findUnique({ where: { id: candidateId }, select: { restaurantId: true } });
+      if (table) target = table.restaurantId;
+    } else if (req.baseUrl.includes('/categories') || fullUrl.includes('/categories')) {
+      const cat = await prisma.category.findUnique({ where: { id: candidateId }, select: { restaurantId: true } });
+      if (cat) target = cat.restaurantId;
+    } else if (req.baseUrl.includes('/media') || fullUrl.includes('/media')) {
+      const med = await prisma.media.findUnique({ where: { id: candidateId }, select: { restaurantId: true } });
+      if (med) target = med.restaurantId;
+    } else if (req.baseUrl.includes('/qr') || fullUrl.includes('/qr')) {
+      const qr = await prisma.qrCode.findUnique({ where: { id: candidateId }, select: { restaurantId: true } });
+      if (qr) target = qr.restaurantId;
+    } else if (req.baseUrl.includes('/customers') || fullUrl.includes('/customers')) {
+      const customer = await prisma.customer.findUnique({ where: { id: candidateId }, select: { restaurantId: true } });
+      if (customer) target = customer.restaurantId;
+    } else if (req.baseUrl.includes('/notifications') || fullUrl.includes('/notifications')) {
+      const notif = await prisma.notification.findUnique({ where: { id: candidateId }, select: { restaurantId: true } });
+      if (notif) target = notif.restaurantId;
+    }
   }
 
-  // Payment lookup
-  if (!targetRestaurantId && (req.baseUrl.includes('/payments') || fullUrl.includes('/payments')) && candidateId) {
-    const payment = await prisma.payment.findUnique({
-      where: { id: candidateId },
-      select: { restaurantId: true },
-    });
-    if (payment) targetRestaurantId = payment.restaurantId;
-  }
-
-  // Table lookup
-  if (!targetRestaurantId && (req.baseUrl.includes('/tables') || fullUrl.includes('/tables')) && candidateId) {
-    const table = await prisma.table.findUnique({
-      where: { id: candidateId },
-      select: { restaurantId: true },
-    });
-    if (table) targetRestaurantId = table.restaurantId;
-  }
-
-  // Category lookup
-  if (!targetRestaurantId && (req.baseUrl.includes('/categories') || fullUrl.includes('/categories')) && candidateId) {
-    const cat = await prisma.category.findUnique({
-      where: { id: candidateId },
-      select: { restaurantId: true },
-    });
-    if (cat) targetRestaurantId = cat.restaurantId;
-  }
-
-  // Media lookup
-  if (!targetRestaurantId && (req.baseUrl.includes('/media') || fullUrl.includes('/media')) && candidateId) {
-    const med = await prisma.media.findUnique({
-      where: { id: candidateId },
-      select: { restaurantId: true },
-    });
-    if (med) targetRestaurantId = med.restaurantId;
-  }
-
-  // Customer lookup
-  if (!targetRestaurantId && (req.baseUrl.includes('/customers') || fullUrl.includes('/customers')) && candidateId) {
-    const customer = await prisma.customer.findUnique({
-      where: { id: candidateId },
-      select: { restaurantId: true },
-    });
-    if (customer) targetRestaurantId = customer.restaurantId;
-  }
-
-  // Notification lookup
-  if (!targetRestaurantId && (req.baseUrl.includes('/notifications') || fullUrl.includes('/notifications')) && candidateId) {
-    const notif = await prisma.notification.findUnique({
-      where: { id: candidateId },
-      select: { restaurantId: true },
-    });
-    if (notif) targetRestaurantId = notif.restaurantId;
-  }
-
-  return targetRestaurantId || null;
+  // Never return a non-UUID (slug/email/name) as a tenant id.
+  return target && isValidUuid(target) ? target : null;
 }
 
 /**

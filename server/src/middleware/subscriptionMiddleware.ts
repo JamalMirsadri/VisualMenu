@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { SubscriptionStatus } from '@prisma/client';
 import { prisma } from '../prisma';
-import { isValidUuid } from './validation';
+import { resolveRestaurantId } from './authMiddleware';
 
 import { getJwtSecret } from '../config';
 
@@ -32,32 +32,11 @@ export function requireActiveSubscription() {
       return;
     }
 
-    // 2. Resolve target restaurantId
-    let restaurantId = req.params.restaurantId || req.userRestaurantId;
+    // 2. Resolve the target restaurant id through the single canonical resolver.
+    let restaurantId = await resolveRestaurantId(req);
 
-    const fullUrl = `${req.baseUrl || ''}${req.path || ''}`;
-
-    if (!restaurantId && (req.baseUrl.includes('/restaurants') || fullUrl.includes('/restaurants')) && req.params.id) {
-      restaurantId = req.params.id;
-    }
-
-    if (!restaurantId && req.body && req.body.restaurantId) {
-      restaurantId = req.body.restaurantId;
-    }
-
-    if (!restaurantId && req.query && typeof req.query.restaurantId === 'string') {
-      restaurantId = req.query.restaurantId;
-    }
-
-    // Check URL pattern /restaurants/:uuid
-    if (!restaurantId) {
-      const match = (req.originalUrl || fullUrl).match(/\/restaurants\/([0-9a-fA-F-]{36})/);
-      if (match) {
-        restaurantId = match[1];
-      }
-    }
-
-    // If still not resolved, check user's assigned restaurant membership
+    // If still not resolved (no URL/body/query/header tenant context), fall back
+    // to the user's assigned restaurant membership.
     if (!restaurantId && req.user?.id) {
       const membership = await prisma.userRestaurant.findFirst({
         where: { userId: req.user.id },
@@ -71,17 +50,6 @@ export function requireActiveSubscription() {
     // If no restaurant context could be determined, allow downstream middleware to handle 400/403
     if (!restaurantId) {
       next();
-      return;
-    }
-
-    // Reject non-UUID tenant identifiers before they reach Prisma's UUID parser.
-    // A slug/email/name must never be passed as a restaurant UUID.
-    if (!isValidUuid(restaurantId)) {
-      res.status(400).json({
-        success: false,
-        errorCode: 'INVALID_RESTAURANT_ID',
-        message: 'Restaurant identifier must be a valid UUID.',
-      });
       return;
     }
 
@@ -241,11 +209,7 @@ export function requireRestaurantServiceActive() {
       return;
     }
 
-    if (
-      restaurant.provisioningStatus === 'SUBSCRIPTION_PENDING' ||
-      restaurant.slug.includes('nosub') ||
-      restaurant.slug.includes('no-sub')
-    ) {
+    if (restaurant.provisioningStatus === 'SUBSCRIPTION_PENDING') {
       res.status(503).json({
         success: false,
         code: 'RESTAURANT_SERVICE_UNAVAILABLE',
@@ -267,24 +231,12 @@ export function requireRestaurantServiceActive() {
     });
 
     if (!subscription) {
-      if (
-        restaurant.provisioningStatus === 'SUBSCRIPTION_PENDING' ||
-        restaurant.slug.includes('nosub') ||
-        restaurant.slug.includes('no-sub') ||
-        process.env.NODE_ENV === 'production' ||
-        restaurant.provisioningStatus !== 'ACTIVE'
-      ) {
-        res.status(503).json({
-          success: false,
-          code: 'RESTAURANT_SERVICE_UNAVAILABLE',
-          errorCode: 'RESTAURANT_SERVICE_UNAVAILABLE',
-          message: 'Restaurant service temporarily unavailable',
-        });
-        return;
-      }
-
-      // Legacy fallback for tests
-      next();
+      res.status(503).json({
+        success: false,
+        code: 'RESTAURANT_SERVICE_UNAVAILABLE',
+        errorCode: 'RESTAURANT_SERVICE_UNAVAILABLE',
+        message: 'Restaurant service temporarily unavailable',
+      });
       return;
     }
 

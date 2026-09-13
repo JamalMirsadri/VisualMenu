@@ -33,7 +33,7 @@ export interface RefundInput {
 }
 
 export class PaymentService {
-  private static providers: Map<string, PaymentProvider> = new Map([
+  private static providers: Map<string, PaymentProvider> = new Map<string, PaymentProvider>([
     ['MOCK', new MockPaymentProvider()],
     ['STRIPE', new StripePaymentProvider()],
     ['MBWAY', new MBWayPaymentProvider()],
@@ -512,6 +512,7 @@ export class PaymentService {
         orderId: payment.orderId,
         status: newStatus,
         method: payment.method,
+        amount: Number(payment.amount),
         refundAmount: refundAmountNum,
         currency: payment.currency,
       },

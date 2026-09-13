@@ -571,7 +571,7 @@ orderRouter.post(
 // PROTECTED ADMIN & KITCHEN ORDER OPERATIONS
 // =============================================================================
 
-orderRouter.use('/restaurants/:restaurantId/orders', authenticateToken, requireActiveSubscription());
+orderRouter.use('/restaurants/:restaurantId/orders', authenticateToken, validateUuidParams(['restaurantId']), requireActiveSubscription());
 
 /**
  * GET /api/restaurants/:restaurantId/orders

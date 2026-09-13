@@ -68,8 +68,8 @@ restaurantRouter.get('/', async (req: Request, res: Response, next: NextFunction
   }
 });
 
-// GET /api/restaurants/:slug
-restaurantRouter.get('/:slug', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+// GET /api/restaurants/by-slug/:slug — explicit slug lookup (public/onboarding)
+restaurantRouter.get('/by-slug/:slug', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { slug } = req.params;
     const restaurant = await prisma.restaurant.findUnique({
@@ -81,6 +81,29 @@ restaurantRouter.get('/:slug', async (req: Request, res: Response, next: NextFun
       res.status(404).json({
         success: false,
         message: `Restaurant with slug '${slug}' not found.`,
+        errorCode: 'RESTAURANT_NOT_FOUND',
+      });
+      return;
+    }
+    res.json({ success: true, data: restaurant });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/restaurants/:id — UUID lookup (admin tenant context)
+restaurantRouter.get('/:id', validateUuidParams(['id']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id },
+      include: { settings: true },
+    });
+
+    if (!restaurant) {
+      res.status(404).json({
+        success: false,
+        message: `Restaurant with id '${id}' not found.`,
         errorCode: 'RESTAURANT_NOT_FOUND',
       });
       return;
