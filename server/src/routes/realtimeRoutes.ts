@@ -5,6 +5,7 @@ import { prisma } from '../prisma';
 import { realtimeService } from '../services/realtimeService';
 import { isValidUuid } from '../middleware/validation';
 import { getJwtSecret } from '../config';
+import { sendRestaurantDisabled } from '../middleware/subscriptionMiddleware';
 
 export const realtimeRouter = Router();
 
@@ -126,6 +127,16 @@ const handleRestaurantStream = async (req: Request, res: Response, next: NextFun
           errorCode: 'SUBSCRIPTION_REQUIRED',
           message: 'Active subscription required to access this resource',
         });
+        return;
+      }
+
+      // Enforce that the restaurant has not been disabled by platform admin.
+      const restaurantState = await prisma.restaurant.findUnique({
+        where: { id: restaurantId },
+        select: { active: true },
+      });
+      if (restaurantState && !restaurantState.active) {
+        sendRestaurantDisabled(res);
         return;
       }
 

@@ -4,6 +4,7 @@ import multer from 'multer';
 import { prisma } from '../prisma';
 import { PlatformService } from '../services/platformService';
 import { RestaurantProvisioningService } from '../services/restaurantProvisioningService';
+import { RestaurantDeletionService } from '../services/restaurantDeletionService';
 import { SubscriptionService } from '../services/subscription/subscriptionService';
 import { PlatformMessageService } from '../services/platformMessageService';
 import { requirePlatformRole } from '../middleware/authMiddleware';
@@ -411,6 +412,41 @@ platformRouter.post(
         data: updated,
       });
     } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * DELETE /api/platform/restaurants/:id
+ * Permanently delete a restaurant tenant and all of its data (no soft-delete).
+ */
+platformRouter.delete(
+  '/restaurants/:id',
+  validateUuidParams(['id']),
+  requirePlatformRole(PlatformRole.PLATFORM_ADMIN),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await RestaurantDeletionService.hardDelete(
+        req.params.id,
+        req.user!.id,
+        req.user!.platformRole!
+      );
+
+      res.json({
+        success: true,
+        message: `Restaurant "${result.name}" was permanently deleted.`,
+        data: result,
+      });
+    } catch (err: any) {
+      if (err.statusCode || err.errorCode) {
+        res.status(err.statusCode || 400).json({
+          success: false,
+          errorCode: err.errorCode || 'DELETE_FAILED',
+          message: err.message,
+        });
+        return;
+      }
       next(err);
     }
   }

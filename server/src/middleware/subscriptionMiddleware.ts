@@ -7,6 +7,19 @@ import { resolveRestaurantId } from './authMiddleware';
 import { getJwtSecret } from '../config';
 
 /**
+ * Sends a consistent "restaurant disabled" response used by tenant-gating
+ * middleware and the realtime stream.
+ */
+export function sendRestaurantDisabled(res: Response): void {
+  res.status(403).json({
+    success: false,
+    code: 'RESTAURANT_DISABLED',
+    errorCode: 'RESTAURANT_DISABLED',
+    message: 'This restaurant has been disabled by the platform administrator.',
+  });
+}
+
+/**
  * Centralized middleware that enforces an ACTIVE or GRACE_PERIOD subscription
  * for restaurant administration and operational management APIs.
  *
@@ -68,6 +81,16 @@ export function requireActiveSubscription() {
         next();
         return;
       }
+    }
+
+    // 2c. Enforce that the target restaurant has not been disabled by platform admin.
+    const targetRestaurant = await prisma.restaurant.findUnique({
+      where: { id: restaurantId },
+      select: { active: true },
+    });
+    if (targetRestaurant && !targetRestaurant.active) {
+      sendRestaurantDisabled(res);
+      return;
     }
 
     // 3. Query subscription state authoritatively from database

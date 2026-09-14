@@ -36,6 +36,7 @@
     "test:identifier-contract": "tsx server/tests/restaurantIdentifierContract.test.ts",
     "test:stabilization": "tsx server/tests/productionStabilization.test.ts",
     "test:media-url": "tsx server/tests/mediaUrlHandling.test.ts",
+    "test:restaurant-delete": "tsx server/tests/restaurantDisableDelete.test.ts",
     "db:verify-uuid": "tsx server/scripts/verifyUuidColumns.ts",
     "lint": "oxlint",
     "preview": "vite preview"

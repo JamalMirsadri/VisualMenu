@@ -91,6 +91,24 @@ authRouter.post('/login', loginRateLimiter, async (req: Request, res: Response):
       return;
     }
 
+    // Block login when the user has no platform role and every assigned
+    // restaurant has been disabled by platform administration.
+    if (!user.platformRole && user.userRestaurants.length > 0) {
+      const restaurantIds = user.userRestaurants.map((ur) => ur.restaurantId);
+      const activeCount = await prisma.restaurant.count({
+        where: { id: { in: restaurantIds }, active: true },
+      });
+      if (activeCount === 0) {
+        res.status(403).json({
+          success: false,
+          code: 'RESTAURANT_DISABLED',
+          errorCode: 'RESTAURANT_DISABLED',
+          message: 'This restaurant has been disabled by the platform administrator.',
+        });
+        return;
+      }
+    }
+
     // Generate JWT token
     const token = jwt.sign(
       {
@@ -172,6 +190,23 @@ authRouter.get('/me', authenticateToken, async (req: Request, res: Response): Pr
         message: 'User not found.',
       });
       return;
+    }
+
+    // Block active sessions when every assigned restaurant is disabled.
+    if (!user.platformRole && user.userRestaurants.length > 0) {
+      const restaurantIds = user.userRestaurants.map((ur) => ur.restaurantId);
+      const activeCount = await prisma.restaurant.count({
+        where: { id: { in: restaurantIds }, active: true },
+      });
+      if (activeCount === 0) {
+        res.status(403).json({
+          success: false,
+          code: 'RESTAURANT_DISABLED',
+          errorCode: 'RESTAURANT_DISABLED',
+          message: 'This restaurant has been disabled by the platform administrator.',
+        });
+        return;
+      }
     }
 
     const restaurants = user.userRestaurants.map((ur) => ({

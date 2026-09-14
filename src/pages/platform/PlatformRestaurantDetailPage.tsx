@@ -14,6 +14,7 @@ import {
   RefreshCw,
   AlertCircle,
   Pencil,
+  Trash2,
 } from 'lucide-react';
 import { platformService } from '../../services/platformService';
 import { useAuth } from '../../context/AuthContext';
@@ -28,6 +29,9 @@ export const PlatformRestaurantDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteNameInput, setDeleteNameInput] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const { enterRestaurantContext } = useAuth();
   const navigate = useNavigate();
 
@@ -95,6 +99,20 @@ export const PlatformRestaurantDetailPage: React.FC = () => {
       alert(`Status change failed: ${err.message}`);
     } finally {
       setStatusLoading(false);
+    }
+  };
+
+  const handleDeleteRestaurant = async () => {
+    if (!data?.restaurant) return;
+    if (deleteNameInput.trim() !== data.restaurant.name) return;
+
+    try {
+      setDeleting(true);
+      await platformService.deleteRestaurant(data.restaurant.id);
+      navigate('/platform/restaurants');
+    } catch (err: any) {
+      alert(`Delete failed: ${err.message}`);
+      setDeleting(false);
     }
   };
 
@@ -277,6 +295,19 @@ export const PlatformRestaurantDetailPage: React.FC = () => {
                   <span>Activate Tenant</span>
                 </>
               )}
+            </button>
+
+            {/* Delete Permanently */}
+            <button
+              onClick={() => {
+                setDeleteNameInput('');
+                setDeleteModalOpen(true);
+              }}
+              disabled={statusLoading}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-red-950/70 border border-zinc-700 hover:border-red-700 text-zinc-300 hover:text-red-300 text-xs font-semibold transition-all cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Delete Permanently</span>
             </button>
           </div>
         </div>
@@ -514,6 +545,58 @@ export const PlatformRestaurantDetailPage: React.FC = () => {
           settings={data.settings}
           onSuccess={() => loadDetails()}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && data?.restaurant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-zinc-900 border border-red-800/60 shadow-2xl p-6 space-y-5">
+            <div className="space-y-2">
+              <h2 className="text-lg font-bold text-red-400 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5" />
+                <span>Delete Restaurant Permanently</span>
+              </h2>
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                You are about to permanently delete <strong className="text-white">{data.restaurant.name}</strong> and ALL of its data
+                (menu, orders, payments, customers, staff, subscriptions, media files). This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-zinc-300">
+                Type <span className="text-red-300 font-mono">{data.restaurant.name}</span> to confirm
+              </label>
+              <input
+                type="text"
+                value={deleteNameInput}
+                onChange={(e) => setDeleteNameInput(e.target.value)}
+                placeholder={data.restaurant.name}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-700 text-sm text-white focus:outline-none focus:border-red-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                onClick={() => {
+                  setDeleteModalOpen(false);
+                  setDeleteNameInput('');
+                }}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteRestaurant}
+                disabled={deleting || deleteNameInput.trim() !== data.restaurant.name}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {deleting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>{deleting ? 'Deleting...' : 'Delete Permanently'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

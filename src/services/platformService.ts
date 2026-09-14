@@ -124,6 +124,11 @@ export const platformService = {
     }
   },
 
+  async deleteRestaurant(restaurantId: string): Promise<any> {
+    const res = await apiClient.delete<any>(`/platform/restaurants/${restaurantId}`);
+    return unwrapResponse<any>(res);
+  },
+
   async recordContextEnter(restaurantId: string): Promise<void> {
     try {
       await apiClient.post(`/platform/restaurants/${restaurantId}/context/enter`);
