@@ -1,7 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { AuditAction, Role } from '@prisma/client';
+import { AuditAction, Role, OrderStatus, PaymentStatus } from '@prisma/client';
 import { prisma } from '../prisma';
 import { AuditService } from '../services/auditService';
+import { NotificationService } from '../services/notificationService';
 import { validateUuidParams } from '../middleware/validation';
 import { requireRestaurantAccess, requirePermission, authenticateToken } from '../middleware/authMiddleware';
 import { hasPermission } from '../constants/permissions';
@@ -113,6 +114,48 @@ restaurantRouter.get('/:id', validateUuidParams(['id']), async (req: Request, re
     next(err);
   }
 });
+
+// GET /api/restaurants/:id/activity-badges
+// Tenant-scoped aggregate counts for the restaurant admin sidebar unread badges.
+restaurantRouter.get(
+  '/:id/activity-badges',
+  validateUuidParams(['id']),
+  requireRestaurantAccess(),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id: restaurantId } = req.params;
+      const now = new Date();
+
+      const [liveOrders, notifications, payments, kitchen, staffInvitations, tables] = await Promise.all([
+        prisma.order.count({ where: { restaurantId, status: OrderStatus.PENDING } }),
+        NotificationService.getUnreadCount(restaurantId, req.user?.id),
+        prisma.payment.count({
+          where: { restaurantId, status: { in: [PaymentStatus.PENDING, PaymentStatus.UNPAID] } },
+        }),
+        prisma.order.count({
+          where: { restaurantId, status: { in: [OrderStatus.CONFIRMED, OrderStatus.PREPARING] } },
+        }),
+        prisma.staffInvitation.count({
+          where: { restaurantId, acceptedAt: null, revokedAt: null, expiresAt: { gt: now } },
+        }),
+        prisma.table.count({
+          where: {
+            restaurantId,
+            active: true,
+            orders: { some: { status: { in: [OrderStatus.READY, OrderStatus.SERVED] } } },
+          },
+        }),
+      ]);
+
+      res.json({
+        success: true,
+        data: { liveOrders, notifications, payments, kitchen, staffInvitations, tables },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 // PATCH /api/restaurants/:id/status
 restaurantRouter.patch(

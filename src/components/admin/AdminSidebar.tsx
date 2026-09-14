@@ -23,6 +23,16 @@ import {
 } from 'lucide-react';
 import type { Restaurant } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { useAdminBadges, type BadgeKey } from '../../hooks/useAdminBadges';
+
+interface AdminNavItem {
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  end?: boolean;
+  permission?: string;
+  badgeKey?: BadgeKey;
+}
 
 interface AdminSidebarProps {
   restaurant: Restaurant | null;
@@ -35,27 +45,28 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onResetData,
   onNavigate,
 }) => {
-  const { user, role, logout, hasPermission } = useAuth();
+  const { user, role, logout, hasPermission, activeRestaurant } = useAuth();
+  const { badgeCount, markSeen } = useAdminBadges(activeRestaurant?.id);
   const navigate = useNavigate();
 
   // All restaurant-level operational navigation items
   // Note: All Restaurants and cross-tenant directories are strictly platform-only under /platform/*
-  const allNavItems = [
+  const allNavItems: AdminNavItem[] = [
     { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, permission: 'VIEW_DASHBOARD' },
     { to: '/admin/floor', label: 'Floor Operations', icon: LayoutGrid, permission: 'VIEW_TABLES' },
-    { to: '/admin/orders', label: 'Live Orders', icon: ClipboardList, permission: 'VIEW_ORDERS' },
-    { to: '/admin/kitchen', label: 'Kitchen KDS', icon: ChefHat, permission: 'VIEW_KITCHEN' },
-    { to: '/admin/payments', label: 'Payments', icon: CreditCard, permission: 'VIEW_PAYMENTS' },
+    { to: '/admin/orders', label: 'Live Orders', icon: ClipboardList, permission: 'VIEW_ORDERS', badgeKey: 'liveOrders' },
+    { to: '/admin/kitchen', label: 'Kitchen KDS', icon: ChefHat, permission: 'VIEW_KITCHEN', badgeKey: 'kitchen' },
+    { to: '/admin/payments', label: 'Payments', icon: CreditCard, permission: 'VIEW_PAYMENTS', badgeKey: 'payments' },
     { to: '/admin/cash', label: 'Cash Register', icon: Banknote, permission: 'CONFIRM_CASH_PAYMENT' },
     { to: '/admin/customers', label: 'Customers & NIF', icon: UserCheck, permission: 'VIEW_CUSTOMERS' },
-    { to: '/admin/tables', label: 'Dining Tables', icon: Armchair, permission: 'VIEW_TABLES' },
+    { to: '/admin/tables', label: 'Dining Tables', icon: Armchair, permission: 'VIEW_TABLES', badgeKey: 'tables' },
     { to: '/admin/categories', label: 'Categories', icon: FolderTree, permission: 'MANAGE_CATEGORIES' },
     { to: '/admin/foods', label: 'Food Items', icon: UtensilsCrossed, permission: 'MANAGE_FOODS' },
     { to: '/admin/media', label: 'Media Library', icon: ImageIcon, permission: 'VIEW_MEDIA' },
     { to: '/admin/menu-preview', label: 'Menu Preview', icon: Eye, permission: 'VIEW_MENU' },
     { to: '/admin/qr', label: 'QR Codes', icon: QrCode, permission: 'VIEW_QR_CODES' },
-    { to: '/admin/staff', label: 'Staff & Roles', icon: Users, permission: 'VIEW_STAFF' },
-    { to: '/admin/notifications', label: 'Notifications', icon: Bell },
+    { to: '/admin/staff', label: 'Staff & Roles', icon: Users, permission: 'VIEW_STAFF', badgeKey: 'staffInvitations' },
+    { to: '/admin/notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
     ...(role === 'OWNER' ? [{ to: '/admin/subscription', label: 'Subscription', icon: CreditCard }] : []),
     { to: '/admin/restaurant', label: 'Restaurant Settings', icon: Settings, permission: 'MANAGE_RESTAURANT_SETTINGS' },
   ];
@@ -135,24 +146,35 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1 custom-scrollbar"
       >
         <nav className="space-y-1" aria-label="Restaurant navigation">
-          {visibleNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              onClick={onNavigate}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all min-h-[40px] ${
-                  isActive
-                    ? 'bg-amber-500 text-black font-semibold shadow-md shadow-amber-500/20'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
-                }`
-              }
-            >
-              <item.icon className="w-4 h-4 shrink-0" />
-              <span className="truncate">{item.label}</span>
-            </NavLink>
-          ))}
+          {visibleNavItems.map((item) => {
+            const count = item.badgeKey ? badgeCount(item.badgeKey) : 0;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                onClick={() => {
+                  if (item.badgeKey) void markSeen(item.badgeKey);
+                  onNavigate?.();
+                }}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all min-h-[40px] ${
+                    isActive
+                      ? 'bg-amber-500 text-black font-semibold shadow-md shadow-amber-500/20'
+                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900/80'
+                  }`
+                }
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{item.label}</span>
+                {count > 0 && (
+                  <span className="ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-zinc-950 shrink-0">
+                    {count > 9 ? '9+' : count}
+                  </span>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
       </div>
 
