@@ -6,6 +6,7 @@ import { validateCategoryOwnership, validateUuidParams } from '../middleware/val
 import { requireRestaurantAccess, requirePermission, authenticateToken } from '../middleware/authMiddleware';
 import { getStorageProvider } from '../services/storageProvider';
 import { hasPermission } from '../constants/permissions';
+import { extractStorageKey, isLocalMediaUrl } from '../config';
 
 export const foodRouter = Router();
 
@@ -266,7 +267,7 @@ foodRouter.post(
               type: MediaType.IMAGE,
               url: trimmedImage,
               isPrimary: true,
-              sourceType: trimmedImage.startsWith('/uploads/') ? 'UPLOAD' : 'EXTERNAL_URL',
+              sourceType: isLocalMediaUrl(trimmedImage) ? 'UPLOAD' : 'EXTERNAL_URL',
             },
           });
         }
@@ -279,7 +280,7 @@ foodRouter.post(
               type: MediaType.VIDEO,
               url: trimmedVideo,
               isPrimary: false,
-              sourceType: trimmedVideo.startsWith('/uploads/') ? 'UPLOAD' : 'EXTERNAL_URL',
+              sourceType: isLocalMediaUrl(trimmedVideo) ? 'UPLOAD' : 'EXTERNAL_URL',
             },
           });
         }
@@ -414,11 +415,11 @@ foodRouter.put(
           const trimmedImg = typeof image === 'string' ? image.trim() : '';
 
           if (trimmedImg) {
-            const isUpload = trimmedImg.startsWith('/uploads/');
+            const isUpload = isLocalMediaUrl(trimmedImg);
             if (imgRecord) {
-              if (imgRecord.url && imgRecord.url.startsWith('/uploads/') && imgRecord.url !== trimmedImg) {
-                const oldKey = imgRecord.url.replace('/uploads/', '');
-                await getStorageProvider().delete(oldKey).catch(() => {});
+              if (imgRecord.url && isLocalMediaUrl(imgRecord.url) && imgRecord.url !== trimmedImg) {
+                const oldKey = extractStorageKey(imgRecord.url);
+                if (oldKey) await getStorageProvider().delete(oldKey).catch(() => {});
               }
               await tx.media.update({
                 where: { id: imgRecord.id },
@@ -440,8 +441,8 @@ foodRouter.put(
               });
             }
           } else if (imgRecord) {
-            if (imgRecord.url && imgRecord.url.startsWith('/uploads/')) {
-              const oldKey = imgRecord.url.replace('/uploads/', '');
+            const oldKey = extractStorageKey(imgRecord.url);
+            if (oldKey) {
               await getStorageProvider().delete(oldKey).catch(() => {});
             }
             await tx.media.delete({ where: { id: imgRecord.id } });
@@ -455,11 +456,11 @@ foodRouter.put(
           const trimmedVid = typeof video === 'string' ? video.trim() : '';
 
           if (trimmedVid) {
-            const isUpload = trimmedVid.startsWith('/uploads/');
+            const isUpload = isLocalMediaUrl(trimmedVid);
             if (vidRecord) {
-              if (vidRecord.url && vidRecord.url.startsWith('/uploads/') && vidRecord.url !== trimmedVid) {
-                const oldKey = vidRecord.url.replace('/uploads/', '');
-                await getStorageProvider().delete(oldKey).catch(() => {});
+              if (vidRecord.url && isLocalMediaUrl(vidRecord.url) && vidRecord.url !== trimmedVid) {
+                const oldKey = extractStorageKey(vidRecord.url);
+                if (oldKey) await getStorageProvider().delete(oldKey).catch(() => {});
               }
               await tx.media.update({
                 where: { id: vidRecord.id },
@@ -481,8 +482,8 @@ foodRouter.put(
               });
             }
           } else if (vidRecord) {
-            if (vidRecord.url && vidRecord.url.startsWith('/uploads/')) {
-              const oldKey = vidRecord.url.replace('/uploads/', '');
+            const oldKey = extractStorageKey(vidRecord.url);
+            if (oldKey) {
               await getStorageProvider().delete(oldKey).catch(() => {});
             }
             await tx.media.delete({ where: { id: vidRecord.id } });

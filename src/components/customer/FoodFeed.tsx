@@ -12,6 +12,7 @@ import {
 import type { Category, FoodItem, Restaurant } from '../../types';
 import { useCart } from '../../context/CartContext';
 import { getTranslations } from '../../i18n/translations';
+import { resolveMediaUrl } from '../../config';
 import { CategoryNav } from './CategoryNav';
 import { FoodDetailsModal } from './FoodDetailsModal';
 import { FoodSlide } from './FoodSlide';
@@ -60,6 +61,8 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
   const currentFood = foods[activeIndex] || foods[0];
   const activeCategoryId = currentFood?.categoryId;
   const currentCategory = currentFood ? categoryMap.current.get(currentFood.categoryId) : undefined;
+  const currentFoodImage = resolveMediaUrl(currentFood?.image);
+  const currentFoodVideo = resolveMediaUrl(currentFood?.video);
 
   // Notify parent component when active food changes (for inspector/context panel)
   useEffect(() => {
@@ -175,7 +178,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
       {!isMobileOnly && currentFood && (
         <div
           className="hidden lg:block absolute inset-0 bg-cover bg-center blur-3xl opacity-20 transition-all duration-1000 scale-110 pointer-events-none"
-          style={{ backgroundImage: `url(${currentFood.image})` }}
+          style={{ backgroundImage: `url(${currentFoodImage})` }}
         />
       )}
       {!isMobileOnly && (
@@ -384,7 +387,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
               <div className="relative aspect-video w-full rounded-2xl overflow-hidden border border-amber-500/20 shadow-xl bg-zinc-950">
                 {currentFood.image ? (
                   <img
-                    src={currentFood.image}
+                    src={currentFoodImage}
                     alt={currentFood.name}
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -393,7 +396,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
                   />
                 ) : currentFood.video ? (
                   <SinglePlayVideo
-                    src={currentFood.video}
+                    src={currentFoodVideo}
                     activationKey={currentFood.id}
                     autoPlay
                     muted

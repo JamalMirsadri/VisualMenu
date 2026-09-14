@@ -35,6 +35,7 @@
     "test:restaurant-lifecycle": "tsx server/tests/restaurantLifecycle.test.ts",
     "test:identifier-contract": "tsx server/tests/restaurantIdentifierContract.test.ts",
     "test:stabilization": "tsx server/tests/productionStabilization.test.ts",
+    "test:media-url": "tsx server/tests/mediaUrlHandling.test.ts",
     "db:verify-uuid": "tsx server/scripts/verifyUuidColumns.ts",
     "lint": "oxlint",
     "preview": "vite preview"

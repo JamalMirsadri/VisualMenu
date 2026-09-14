@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, Clock, Flame, Sparkles, Utensils, X } from 'lucide-react';
 import type { Category, FoodItem } from '../../types';
 import { useCart } from '../../context/CartContext';
+import { resolveMediaUrl } from '../../config';
 import { LuxuryFoodFallback } from './LuxuryFoodFallback';
 import { SinglePlayVideo } from './SinglePlayVideo';
 
@@ -67,14 +68,14 @@ export const FoodDetailsModal: React.FC<FoodDetailsModalProps> = ({
             <div className="relative h-48 sm:h-56 w-full overflow-hidden bg-zinc-900">
               {hasImage ? (
                 <img
-                  src={food.image!}
+                  src={resolveMediaUrl(food.image)}
                   alt={food.name}
                   className="w-full h-full object-cover"
                   onError={() => setImageError(true)}
                 />
               ) : hasVideo ? (
                 <SinglePlayVideo
-                  src={food.video!}
+                  src={resolveMediaUrl(food.video)}
                   activationKey={food.id}
                   autoPlay
                   muted

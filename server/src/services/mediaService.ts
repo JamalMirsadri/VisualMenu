@@ -2,6 +2,7 @@ import { MediaType } from '@prisma/client';
 import { prisma } from '../prisma';
 import { getStorageProvider, UploadFileInput } from './storageProvider';
 import { MediaValidator } from './mediaValidator';
+import { extractStorageKey, isLocalMediaUrl } from '../config';
 
 export interface CreateMediaInput {
   restaurantId: string;
@@ -194,9 +195,9 @@ export class MediaService {
       newSourceType = 'UPLOAD';
 
       // Clean up old local file if different
-      if (existing.url && existing.url.startsWith('/uploads/') && existing.url !== newUrl) {
-        const oldKey = existing.url.replace('/uploads/', '');
-        await storage.delete(oldKey).catch(() => {});
+      if (existing.url && isLocalMediaUrl(existing.url) && existing.url !== newUrl) {
+        const oldKey = extractStorageKey(existing.url);
+        if (oldKey) await storage.delete(oldKey).catch(() => {});
       }
     }
 
@@ -319,8 +320,8 @@ export class MediaService {
     }
 
     // Try deleting physical file from storage provider if local upload
-    if (existing.url && existing.url.startsWith('/uploads/')) {
-      const key = existing.url.replace('/uploads/', '');
+    const key = extractStorageKey(existing.url);
+    if (key) {
       const storage = getStorageProvider();
       await storage.delete(key).catch(() => {});
     }

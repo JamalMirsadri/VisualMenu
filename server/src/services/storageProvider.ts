@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { buildPublicMediaUrl } from '../config';
 
 export interface UploadFileInput {
   buffer: Buffer;
@@ -29,11 +30,9 @@ export interface MediaStorageProvider {
  */
 export class LocalStorageProvider implements MediaStorageProvider {
   private baseDir: string;
-  private baseUrl: string;
 
-  constructor(baseDir = path.join(process.cwd(), 'uploads'), baseUrl = '/uploads') {
+  constructor(baseDir = path.join(process.cwd(), 'uploads')) {
     this.baseDir = baseDir;
-    this.baseUrl = baseUrl;
 
     if (!fs.existsSync(this.baseDir)) {
       fs.mkdirSync(this.baseDir, { recursive: true });
@@ -61,7 +60,7 @@ export class LocalStorageProvider implements MediaStorageProvider {
     await fs.promises.writeFile(filePath, file.buffer);
 
     const key = folder ? `${folder}/${filename}` : filename;
-    const url = `${this.baseUrl}/${key}`;
+    const url = buildPublicMediaUrl(key);
 
     return {
       url,
@@ -93,7 +92,7 @@ export class LocalStorageProvider implements MediaStorageProvider {
 
   getUrl(key: string): string {
     const safeKey = path.normalize(key).replace(/^(\.\.[\/\\])+/, '');
-    return `${this.baseUrl}/${safeKey.replace(/\\/g, '/')}`;
+    return buildPublicMediaUrl(safeKey.replace(/\\/g, '/'));
   }
 
   async getSignedUrl(key: string, _expiresInSeconds = 3600): Promise<string> {

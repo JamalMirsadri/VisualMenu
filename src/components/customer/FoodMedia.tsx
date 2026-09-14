@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { FoodItem, RestaurantSettings } from '../../types';
+import { resolveMediaUrl } from '../../config';
 import { LuxuryFoodFallback } from './LuxuryFoodFallback';
 
 export type VideoPlaybackState = 'IDLE' | 'PLAYING' | 'ENDED' | 'INACTIVE';
@@ -61,11 +62,11 @@ export const FoodMedia: React.FC<FoodMediaProps> = ({
   const isVisualImage = normalizedMode === 'VISUAL_IMAGE';
 
   const rawImageSrc = food.mobileUrl || food.desktopUrl || food.image;
-  const imageSrc = rawImageSrc || undefined;
+  const imageSrc = resolveMediaUrl(rawImageSrc) || undefined;
   const hasImage = Boolean(imageSrc && imageSrc.trim() && !imageError);
-  const videoSrc = (food.video && food.video.trim()) || undefined;
+  const videoSrc = resolveMediaUrl(food.video) || undefined;
   const hasValidVideo = Boolean(videoSrc && !videoError && !isVisualImage);
-  const posterSrc = (food.posterUrl || (hasImage ? imageSrc : undefined)) || undefined;
+  const posterSrc = resolveMediaUrl(food.posterUrl) || (hasImage ? imageSrc : undefined);
 
   // Video autoplay & single-playback management (Plays once per activation, never loops)
   useEffect(() => {
