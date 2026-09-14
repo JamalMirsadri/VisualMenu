@@ -13,6 +13,7 @@ import {
   Send,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 
 interface PlatformSidebarProps {
   onItemClick?: () => void;
@@ -20,6 +21,7 @@ interface PlatformSidebarProps {
 
 export const PlatformSidebar: React.FC<PlatformSidebarProps> = ({ onItemClick }) => {
   const { user, platformRole, logout, restaurants, activeRestaurant } = useAuth();
+  const { platformName, branding } = usePlatformSettings();
   const navigate = useNavigate();
 
   const navItems = [
@@ -55,20 +57,25 @@ export const PlatformSidebar: React.FC<PlatformSidebarProps> = ({ onItemClick })
       <div className="space-y-6">
         {/* Brand header */}
         <div className="flex items-center gap-3 px-2 py-2">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 via-amber-600 to-amber-700 flex items-center justify-center font-serif text-black font-black text-xl shadow-lg shadow-amber-500/20 shrink-0">
-            A
-          </div>
+          {branding.logo ? (
+            <img
+              src={branding.logo}
+              alt={platformName}
+              className="w-10 h-10 rounded-xl object-cover shrink-0 border border-zinc-800"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 via-amber-600 to-amber-700 flex items-center justify-center font-serif text-black font-black text-xl shadow-lg shadow-amber-500/20 shrink-0">
+              {platformName.charAt(0).toUpperCase()}
+            </div>
+          )}
           <div className="overflow-hidden min-w-0">
-            <h2 className="text-base font-bold text-white tracking-tight truncate flex items-center gap-1.5">
-              <span>AURA</span>
-              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-medium border border-amber-500/30">
-                SaaS
-              </span>
+            <h2 className="text-base font-bold text-white tracking-tight truncate">
+              {platformName}
             </h2>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] font-semibold text-zinc-400 tracking-wider uppercase">
-                Platform Control
+              <span className="text-[10px] font-semibold text-zinc-400 tracking-wider uppercase truncate">
+                {branding.tagline || 'Platform Control'}
               </span>
             </div>
           </div>

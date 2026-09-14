@@ -15,6 +15,7 @@ import {
 import { platformService } from '../../services/platformService';
 import type { PlatformSettingsData } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 
 export const PlatformSettingsPage: React.FC = () => {
   const [settings, setSettings] = useState<PlatformSettingsData | null>(null);
@@ -23,6 +24,28 @@ export const PlatformSettingsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const { isPlatformAdmin, platformRole } = useAuth();
+  const { saveSettings } = usePlatformSettings();
+
+  const branding = ((settings?.featureFlags as any)?.branding || {}) as {
+    logo?: string;
+    favicon?: string;
+    tagline?: string;
+  };
+
+  const updateBranding = (patch: Partial<{ logo: string; favicon: string; tagline: string }>) => {
+    setSettings((prev) => {
+      if (!prev) return prev;
+      const flags = (prev.featureFlags || {}) as Record<string, any>;
+      const current = (flags.branding || {}) as Record<string, any>;
+      return {
+        ...prev,
+        featureFlags: {
+          ...flags,
+          branding: { ...current, ...patch },
+        },
+      };
+    });
+  };
 
   const loadSettings = async () => {
     try {
@@ -50,13 +73,21 @@ export const PlatformSettingsPage: React.FC = () => {
       setSaving(true);
       setError(null);
       setSuccess(null);
-      const updated = await platformService.updateSettings({
+      const updated = await saveSettings({
         platformName: settings.platformName,
         supportEmail: settings.supportEmail,
         defaultCurrency: settings.defaultCurrency,
         defaultLanguage: settings.defaultLanguage,
         maintenanceMode: settings.maintenanceMode,
         systemNotice: settings.systemNotice || null,
+        featureFlags: {
+          ...(settings.featureFlags || {}),
+          branding: {
+            logo: branding.logo || null,
+            favicon: branding.favicon || null,
+            tagline: branding.tagline || null,
+          },
+        },
       });
       setSettings(updated);
       setSuccess('Platform configuration updated successfully.');
@@ -161,6 +192,44 @@ export const PlatformSettingsPage: React.FC = () => {
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-300">Platform Logo URL</label>
+                <input
+                  type="text"
+                  disabled={!isPlatformAdmin}
+                  value={branding.logo || ''}
+                  onChange={(e) => updateBranding({ logo: e.target.value })}
+                  placeholder="https://…/logo.png"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 disabled:opacity-60"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-300">Platform Favicon URL</label>
+                <input
+                  type="text"
+                  disabled={!isPlatformAdmin}
+                  value={branding.favicon || ''}
+                  onChange={(e) => updateBranding({ favicon: e.target.value })}
+                  placeholder="https://…/favicon.svg"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 disabled:opacity-60"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="text-xs font-semibold text-zinc-300">Platform Tagline</label>
+              <input
+                type="text"
+                disabled={!isPlatformAdmin}
+                value={branding.tagline || ''}
+                onChange={(e) => updateBranding({ tagline: e.target.value })}
+                placeholder="e.g. Multi-tenant restaurant operating system"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 disabled:opacity-60"
+              />
             </div>
           </div>
 

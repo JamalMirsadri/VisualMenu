@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { PlatformSettingsProvider } from './context/PlatformSettingsContext';
 import { ProtectedRoute } from './components/admin/ProtectedRoute';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
@@ -42,8 +43,9 @@ import { PermissionRoute } from './components/common/PermissionRoute';
 export const App: React.FC = () => {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
+      <PlatformSettingsProvider>
+        <AuthProvider>
+          <Routes>
           {/* Customer Menu QR Routes */}
           <Route path="/menu/:slug" element={<MenuPage />} />
           <Route path="/menu/:slug/table/:tableNumber" element={<MenuPage />} />
@@ -121,8 +123,9 @@ export const App: React.FC = () => {
           {/* Root Redirects to demo restaurant */}
           <Route path="/" element={<Navigate to="/menu/demo-restaurant" replace />} />
           <Route path="*" element={<Navigate to="/menu/demo-restaurant" replace />} />
-        </Routes>
-      </AuthProvider>
+          </Routes>
+        </AuthProvider>
+      </PlatformSettingsProvider>
     </BrowserRouter>
   );
 };

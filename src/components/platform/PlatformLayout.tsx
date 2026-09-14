@@ -1,12 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Menu, X, Shield, Activity } from 'lucide-react';
 import { PlatformSidebar } from './PlatformSidebar';
 import { useAuth } from '../../context/AuthContext';
+import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 
 export const PlatformLayout: React.FC = () => {
   const { platformRole } = useAuth();
+  const { platformName, branding } = usePlatformSettings();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    document.title = platformName;
+  }, [platformName]);
 
   return (
     <div className="flex h-screen w-full bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
@@ -55,10 +61,10 @@ export const PlatformLayout: React.FC = () => {
               <div className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-400/50" />
               <div className="flex flex-col">
                 <span className="text-xs font-semibold text-white tracking-wide uppercase">
-                  Aura Platform Administration
+                  {platformName}
                 </span>
                 <span className="text-[10px] text-zinc-400">
-                  Global Multi-Tenant Control Panel
+                  {branding.tagline || 'Global Multi-Tenant Control Panel'}
                 </span>
               </div>
             </div>

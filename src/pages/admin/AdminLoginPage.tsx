@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { usePlatformSettings } from '../../context/PlatformSettingsContext';
 import { Sparkles, Lock, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export const AdminLoginPage: React.FC = () => {
   const { login } = useAuth();
+  const { platformName } = usePlatformSettings();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -51,7 +53,7 @@ export const AdminLoginPage: React.FC = () => {
           <span>Management Portal</span>
         </div>
         <h1 className="font-serif-luxury text-3xl sm:text-4xl font-bold text-white tracking-wide">
-          AURA Studio
+          {platformName}
         </h1>
         <p className="text-xs sm:text-sm text-zinc-400 mt-1.5 max-w-sm mx-auto">
           Sign in to manage visual culinary feeds, instant prices, availability, and multi-tenant menus.
