@@ -21,6 +21,159 @@ const getQrImageUrl = (dataUrl: string, size = 360) =>
     dataUrl
   )}&color=0-0-0&bgcolor=255-255-255&margin=12`;
 
+// CSS pixel per millimetre at 96dpi (used for the on-screen preview scaling).
+const PX_PER_MM = 3.7795;
+const SERIF = `'Times New Roman', Times, serif`;
+const GOLD = '#d4af37';
+
+interface QrPrintCardProps {
+  table: PrintTable;
+  restaurantName: string;
+  restaurantLogo?: string | null;
+  template: QrPrintTemplate;
+  fullMenuUrl: string;
+}
+
+/**
+ * The single source of truth for a printable QR card. Preview and Print both
+ * render this exact component, so their composition is identical.
+ */
+const QrPrintCard: React.FC<QrPrintCardProps> = ({
+  table,
+  restaurantName,
+  restaurantLogo,
+  template,
+  fullMenuUrl,
+}) => {
+  const isA4 = template.layout === 'A4';
+  const width = isA4 ? '210mm' : '85.6mm';
+  const height = isA4 ? '297mm' : '54mm';
+  const pad = isA4 ? '18mm' : '5mm';
+  const gap = isA4 ? '14mm' : '5mm';
+  const qrSize = isA4 ? '76mm' : '30mm';
+  const qrBorder = isA4 ? '2.5mm' : '1.5mm';
+  const logoH = isA4 ? '24mm' : '10mm';
+  const nameSize = isA4 ? '16mm' : '4.8mm';
+  const tableSize = isA4 ? '11mm' : '3.9mm';
+  const numberSize = isA4 ? '9mm' : '3.4mm';
+
+  return (
+    <div
+      className="qr-print-card"
+      style={{
+        width,
+        height,
+        position: 'relative',
+        boxSizing: 'border-box',
+        backgroundImage: template.backgroundUrl ? `url(${template.backgroundUrl})` : undefined,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundColor: '#ffffff',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap,
+          padding: pad,
+        }}
+      >
+        {/* LEFT: gold-framed QR square */}
+        <div
+          style={{
+            width: qrSize,
+            height: qrSize,
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: `${qrBorder} solid ${GOLD}`,
+            background: '#ffffff',
+            padding: isA4 ? '5mm' : '2mm',
+            boxSizing: 'border-box',
+          }}
+        >
+          <img
+            src={getQrImageUrl(`${fullMenuUrl}/table/${table.number}`, isA4 ? 900 : 480)}
+            alt="Table QR"
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          />
+        </div>
+
+        {/* RIGHT: dynamic content (black, serif, aspect-preserving logo) */}
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            gap: isA4 ? '6mm' : '2mm',
+            fontFamily: SERIF,
+            color: '#000000',
+          }}
+        >
+          {restaurantLogo && (
+            <img
+              src={restaurantLogo}
+              alt=""
+              style={{
+                height: logoH,
+                width: 'auto',
+                maxWidth: '100%',
+                objectFit: 'contain',
+                alignSelf: 'flex-start',
+              }}
+            />
+          )}
+          <span
+            style={{
+              fontSize: nameSize,
+              fontWeight: 700,
+              lineHeight: 1.1,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontFamily: SERIF,
+              color: '#000000',
+            }}
+          >
+            {restaurantName}
+          </span>
+          <span
+            style={{
+              fontSize: tableSize,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontFamily: SERIF,
+              color: '#000000',
+            }}
+          >
+            {table.name}
+          </span>
+          <span
+            style={{
+              fontSize: numberSize,
+              fontWeight: 600,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontFamily: SERIF,
+              color: '#000000',
+            }}
+          >
+            No. {table.number}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const AdminQrPrintPage: React.FC = () => {
   const { restaurant, error, refresh, loading: restaurantLoading } = useAdminData();
 
@@ -78,6 +231,15 @@ export const AdminQrPrintPage: React.FC = () => {
     [tables, selectedTableIds]
   );
 
+  const previewMetrics = useMemo(() => {
+    if (!selectedTemplate) return null;
+    const isA4 = selectedTemplate.layout === 'A4';
+    const wmm = isA4 ? 210 : 85.6;
+    const hmm = isA4 ? 297 : 54;
+    const scale = Math.min(1, 300 / (wmm * PX_PER_MM));
+    return { w: wmm * PX_PER_MM * scale, h: hmm * PX_PER_MM * scale, scale, wmm, hmm };
+  }, [selectedTemplate]);
+
   const toggleTable = (id: string) => {
     setSelectedTableIds((prev) => {
       const next = new Set(prev);
@@ -110,10 +272,33 @@ export const AdminQrPrintPage: React.FC = () => {
       <style>{`
         #qr-print-area { display: none; }
         @media print {
+          @page { size: auto; margin: 0; }
+          html, body { background: #ffffff; }
+          .qr-print-card,
+          .qr-print-card *,
+          .qr-print-page,
+          #qr-print-area {
+            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: exact !important;
+          }
           body * { visibility: hidden; }
           #qr-print-area, #qr-print-area * { visibility: visible; }
-          #qr-print-area { display: block !important; position: absolute; left: 0; top: 0; width: 100%; }
+          #qr-print-area {
+            display: block !important;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
           .no-print { display: none !important; }
+          .qr-print-page {
+            page-break-after: always;
+            break-after: page;
+          }
+          .qr-print-page:last-child {
+            page-break-after: auto;
+            break-after: auto;
+          }
         }
       `}</style>
 
@@ -224,43 +409,26 @@ export const AdminQrPrintPage: React.FC = () => {
           {/* Preview */}
           <div className="space-y-3">
             <h2 className="text-sm font-bold text-white">Preview</h2>
-            {selectedTemplate && selectedTables[0] ? (
+            {selectedTemplate && selectedTables[0] && previewMetrics ? (
               <div
-                className="aspect-[85.6/54] w-full rounded-xl overflow-hidden border border-zinc-700 relative"
-                style={{
-                  backgroundImage: selectedTemplate.backgroundUrl ? `url(${selectedTemplate.backgroundUrl})` : undefined,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundColor: '#18181b',
-                }}
+                className="rounded-xl overflow-hidden border border-zinc-700"
+                style={{ width: previewMetrics.w, height: previewMetrics.h }}
               >
-                <div className="absolute inset-0 flex items-center gap-4 p-4">
-                  {/* LEFT: gold-framed QR square */}
-                  <div
-                    className="h-full aspect-square shrink-0 flex items-center justify-center rounded-md bg-white p-2"
-                    style={{ border: '2px solid #d4af37' }}
-                  >
-                    <img
-                      src={getQrImageUrl(`${fullMenuUrl}/table/${selectedTables[0].number}`, 240)}
-                      alt="Table QR"
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                  {/* RIGHT: dynamic content */}
-                  <div className="flex-1 min-w-0 flex flex-col justify-center gap-1 text-white">
-                    {restaurant.logo && (
-                      <img
-                        src={restaurant.logo}
-                        alt="Restaurant logo"
-                        className="h-10 w-auto max-w-full object-contain self-start"
-                      />
-                    )}
-                    <span className="text-base font-bold leading-tight drop-shadow truncate">{restaurant.name}</span>
-                    <span className="text-sm drop-shadow truncate">{selectedTables[0].name}</span>
-                    <span className="text-xs font-semibold drop-shadow" style={{ color: '#d4af37' }}>
-                      No. {selectedTables[0].number}
-                    </span>
-                  </div>
+                <div
+                  style={{
+                    width: previewMetrics.wmm * PX_PER_MM,
+                    height: previewMetrics.hmm * PX_PER_MM,
+                    transform: `scale(${previewMetrics.scale})`,
+                    transformOrigin: 'top left',
+                  }}
+                >
+                  <QrPrintCard
+                    table={selectedTables[0]}
+                    restaurantName={restaurant.name}
+                    restaurantLogo={restaurant.logo}
+                    template={selectedTemplate}
+                    fullMenuUrl={fullMenuUrl}
+                  />
                 </div>
               </div>
             ) : (
@@ -278,55 +446,20 @@ export const AdminQrPrintPage: React.FC = () => {
           selectedTables.map((t) => (
             <div
               key={t.id}
-              style={{
-                width: selectedTemplate.layout === 'A4' ? '100%' : '85.6mm',
-                height: selectedTemplate.layout === 'A4' ? 'auto' : '54mm',
-                minHeight: '54mm',
-                pageBreakInside: 'avoid',
-                position: 'relative',
-                backgroundImage: selectedTemplate.backgroundUrl ? `url(${selectedTemplate.backgroundUrl})` : undefined,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                backgroundColor: '#ffffff',
-                margin: '0 0 4mm 0',
-              }}
+              className="qr-print-page"
+              style={
+                selectedTemplate.layout === 'A4'
+                  ? { width: '210mm', height: '297mm', margin: '0 auto' }
+                  : { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+              }
             >
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', gap: '6mm', padding: '6mm' }}>
-                {/* LEFT: gold-framed QR square */}
-                <div
-                  style={{
-                    height: '42mm',
-                    width: '42mm',
-                    flexShrink: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '1.5mm solid #d4af37',
-                    background: '#ffffff',
-                    padding: '2mm',
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  <img
-                    src={getQrImageUrl(`${fullMenuUrl}/table/${t.number}`, 600)}
-                    alt="Table QR"
-                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                  />
-                </div>
-                {/* RIGHT: dynamic content */}
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '2mm', color: '#111' }}>
-                  {restaurant.logo && (
-                    <img
-                      src={restaurant.logo}
-                      alt=""
-                      style={{ height: '12mm', width: 'auto', maxWidth: '100%', objectFit: 'contain', alignSelf: 'flex-start' }}
-                    />
-                  )}
-                  <span style={{ fontSize: '4mm', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{restaurant.name}</span>
-                  <span style={{ fontSize: '3.5mm', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
-                  <span style={{ fontSize: '3mm', fontWeight: 600, color: '#8a6d1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>No. {t.number}</span>
-                </div>
-              </div>
+              <QrPrintCard
+                table={t}
+                restaurantName={restaurant.name}
+                restaurantLogo={restaurant.logo}
+                template={selectedTemplate}
+                fullMenuUrl={fullMenuUrl}
+              />
             </div>
           ))}
       </div>
