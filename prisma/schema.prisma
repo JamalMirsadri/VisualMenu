@@ -447,6 +447,11 @@ model RestaurantSettings {
   cardPaymentEnabled   Boolean  @default(true) @map("card_payment_enabled")
   mbwayPaymentEnabled  Boolean  @default(true) @map("mbway_payment_enabled")
   multibancoPaymentEnabled Boolean @default(false) @map("multibanco_payment_enabled")
+  stripeEnabled        Boolean  @default(false) @map("stripe_enabled")
+  stripeAccountId      String?  @map("stripe_account_id")
+  stripeSecretKeyEnc   String?  @map("stripe_secret_key_enc")
+  stripePublishableKey String?  @map("stripe_publishable_key")
+  mbwayApiKeyEnc       String?  @map("mbway_api_key_enc")
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
 
@@ -595,9 +600,15 @@ model Customer {
   name               String?
   email              String?
   phone              String?
+  taxId              String?                 @map("tax_id")
+  taxCountry         String?                 @default("PT") @map("tax_country")
   preferredLanguage  String?                 @default("en") @map("preferred_language")
   marketingConsent   Boolean                 @default(false) @map("marketing_consent")
   marketingConsentAt DateTime?               @map("marketing_consent_at")
+  gdprConsent        Boolean                 @default(false) @map("gdpr_consent")
+  gdprConsentAt      DateTime?               @map("gdpr_consent_at")
+  loyaltyPoints      Int                     @default(0) @map("loyalty_points")
+  metadata           Json?
   createdAt          DateTime                @default(now()) @map("created_at")
   updatedAt          DateTime                @default(now()) @updatedAt @map("updated_at")
 
@@ -605,6 +616,7 @@ model Customer {
   fiscalProfiles     CustomerFiscalProfile[]
   orders             Order[]
 
+  @@unique([restaurantId, taxId])
   @@index([restaurantId])
   @@index([email])
   @@index([phone])

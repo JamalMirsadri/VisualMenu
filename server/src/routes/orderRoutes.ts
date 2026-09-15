@@ -8,6 +8,7 @@ import { requireRestaurantAccess, authenticateToken, requirePermission, requireA
 import { orderCreationRateLimiter, orderTrackingRateLimiter } from '../middleware/rateLimiter';
 import { NifValidator } from '../services/fiscal/nifValidator';
 import { CashPaymentService } from '../services/payment/cashPaymentService';
+import { CustomerService } from '../services/customerService';
 import { hasPermission } from '../constants/permissions';
 import { requireActiveSubscription, requireRestaurantServiceActive } from '../middleware/subscriptionMiddleware';
 
@@ -35,6 +36,42 @@ const ORDER_TO_ITEM_STATUS: Partial<Record<OrderStatus, OrderItemStatus>> = {
 // =============================================================================
 // PUBLIC CUSTOMER ORDER SUBMISSION & SECURE ORDER TRACKING
 // =============================================================================
+
+/**
+ * GET /api/payment-methods/:slug
+ * Public: returns the enabled AND correctly-configured payment methods for checkout.
+ */
+orderRouter.get(
+  '/payment-methods/:slug',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const restaurant = await prisma.restaurant.findUnique({
+        where: { slug: String(req.params.slug) },
+        include: { settings: true },
+      });
+      if (!restaurant) {
+        res.status(404).json({ success: false, errorCode: 'RESTAURANT_NOT_FOUND', message: 'Restaurant not found.' });
+        return;
+      }
+
+      const s = restaurant.settings;
+      const available: string[] = [];
+
+      // CASH is available independently of provider credentials.
+      if (!s || s.cashPaymentEnabled) available.push('CASH');
+
+      const mbwayConfigured = Boolean(s?.mbwayApiKeyEnc || process.env.MBWAY_API_KEY);
+      if (s?.mbwayPaymentEnabled && mbwayConfigured) available.push('MBWAY');
+
+      const stripeConfigured = Boolean(s?.stripeSecretKeyEnc || process.env.STRIPE_SECRET_KEY);
+      if (s?.cardPaymentEnabled && s?.stripeEnabled && stripeConfigured) available.push('CARD');
+
+      res.json({ success: true, data: available });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 /**
  * GET /api/orders/track/:publicOrderToken
@@ -140,6 +177,7 @@ orderRouter.post(
         marketingConsent,
         nif,
         customerFiscalName,
+        gdprConsent,
         paymentMethod,
       } = req.body;
 
@@ -147,7 +185,7 @@ orderRouter.post(
       const effectiveName = (customerName || customerFiscalName)?.trim() || null;
       const effectiveEmail = customerEmail?.trim() || null;
       const effectivePhone = (customerPhone || req.body.phone)?.trim() || null;
-      const shouldSaveFiscal = Boolean(saveFiscalProfile || marketingConsent);
+      const shouldSaveFiscal = Boolean(gdprConsent || saveFiscalProfile || marketingConsent);
 
       // Validate Tax Identification / NIF if provided
       let normalizedTaxId: string | null = null;
@@ -354,6 +392,22 @@ orderRouter.post(
 
       const totalFixed = Math.round((subtotalFixed + taxFixed + serviceChargeFixed) * 100) / 100;
 
+      // Resolve / create a persistent customer profile (NIF-keyed, GDPR consent).
+      let resolvedCustomerId: string | null = null;
+      if (normalizedTaxId || effectiveEmail || effectivePhone) {
+        const customerRecord = await CustomerService.resolveForCheckout({
+          restaurantId: restaurant.id,
+          name: effectiveName,
+          email: effectiveEmail,
+          phone: effectivePhone,
+          taxId: normalizedTaxId,
+          taxCountry: normalizedTaxCountry,
+          gdprConsent: shouldSaveFiscal,
+          marketingConsent: Boolean(marketingConsent),
+        });
+        resolvedCustomerId = customerRecord.id;
+      }
+
       // 6. Atomic Transaction: Order, Items, and OrderStatusHistory
       const createdOrder = await prisma.$transaction(async (tx) => {
         // Re-verify availability inside transaction to prevent concurrency overselling
@@ -375,58 +429,8 @@ orderRouter.post(
         const prefix = (restaurant.name.charAt(0) || 'R').toUpperCase();
         const orderNumber = `${prefix}-${1001 + orderCount}`;
 
-        // Customer entity resolution / creation
-        let customerId: string | null = null;
-        if (effectiveEmail || effectivePhone) {
-          let customerRecord = await tx.customer.findFirst({
-            where: {
-              ...(effectiveEmail ? { email: effectiveEmail } : { phone: effectivePhone }),
-            },
-          });
-
-          if (!customerRecord) {
-            customerRecord = await tx.customer.create({
-              data: {
-                restaurantId: restaurant.id,
-                name: effectiveName,
-                email: effectiveEmail,
-                phone: effectivePhone,
-                marketingConsent: shouldSaveFiscal,
-                marketingConsentAt: shouldSaveFiscal ? new Date() : null,
-              },
-            });
-          } else if (shouldSaveFiscal && !customerRecord.marketingConsent) {
-            customerRecord = await tx.customer.update({
-              where: { id: customerRecord.id },
-              data: {
-                marketingConsent: true,
-                marketingConsentAt: new Date(),
-              },
-            });
-          }
-
-          customerId = customerRecord.id;
-
-          if (normalizedTaxId && shouldSaveFiscal) {
-            const existingProfile = await tx.customerFiscalProfile.findFirst({
-              where: {
-                customerId: customerRecord.id,
-                taxId: normalizedTaxId,
-              },
-            });
-
-            if (!existingProfile) {
-              await tx.customerFiscalProfile.create({
-                data: {
-                  customerId: customerRecord.id,
-                  taxId: normalizedTaxId,
-                  taxCountry: normalizedTaxCountry,
-                  billingName: effectiveName,
-                },
-              });
-            }
-          }
-        }
+        // Attach the resolved customer profile to the order.
+        const customerId = resolvedCustomerId;
 
         const newOrder = await tx.order.create({
           data: {

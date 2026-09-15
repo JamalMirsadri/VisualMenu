@@ -149,6 +149,8 @@ customerRouter.get(
       if (!canViewFiscal) {
         responseData = {
           ...customer,
+          taxId: null,
+          taxCountry: null,
           fiscalProfiles: [],
         };
       }

@@ -4,8 +4,20 @@ import { prisma } from '../prisma';
 import { AuditService } from '../services/auditService';
 import { validateUuidParams } from '../middleware/validation';
 import { requireRestaurantAccess } from '../middleware/authMiddleware';
+import { encryptSecret } from '../services/cryptoService';
 
 export const settingsRouter = Router();
+
+// Strips encrypted secrets from any settings payload before it leaves the API.
+export function sanitizeSettings(settings: any) {
+  if (!settings) return settings;
+  const { stripeSecretKeyEnc, mbwayApiKeyEnc, ...rest } = settings;
+  return {
+    ...rest,
+    stripeConfigured: Boolean(stripeSecretKeyEnc),
+    mbwayConfigured: Boolean(mbwayApiKeyEnc),
+  };
+}
 
 // Allowed Enums & Constants
 export const VALID_THEMES = new Set(['DARK_LUXURY', 'LIGHT_MINIMAL', 'WARM_RESTAURANT', 'MODERN_GLASS']);
@@ -68,7 +80,7 @@ settingsRouter.get(
         return;
       }
 
-      res.json({ success: true, data: settings });
+      res.json({ success: true, data: sanitizeSettings(settings) });
     } catch (err) {
       next(err);
     }
@@ -237,7 +249,83 @@ settingsRouter.put(
         metadata: { updatedFields: Object.keys(req.body) },
       });
 
-      res.json({ success: true, data: updated });
+      res.json({ success: true, data: sanitizeSettings(updated) });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// GET /api/restaurants/:restaurantId/payment-settings
+// Never returns encrypted secrets or provider API keys.
+settingsRouter.get(
+  '/restaurants/:restaurantId/payment-settings',
+  validateUuidParams(['restaurantId']),
+  requireRestaurantAccess([Role.OWNER, Role.ADMIN, Role.MANAGER, Role.STAFF]),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { restaurantId } = req.params;
+      const settings = await prisma.restaurantSettings.findUnique({ where: { restaurantId } });
+      if (!settings) {
+        res.status(404).json({ success: false, errorCode: 'SETTINGS_NOT_FOUND', message: 'Restaurant settings not found.' });
+        return;
+      }
+      res.json({
+        success: true,
+        data: {
+          cashEnabled: settings.cashPaymentEnabled,
+          cardEnabled: settings.cardPaymentEnabled,
+          mbwayEnabled: settings.mbwayPaymentEnabled,
+          stripeEnabled: settings.stripeEnabled,
+          stripeAccountId: settings.stripeAccountId,
+          stripePublishableKey: settings.stripePublishableKey,
+          stripeConfigured: Boolean(settings.stripeSecretKeyEnc),
+          mbwayConfigured: Boolean(settings.mbwayApiKeyEnc),
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// PUT /api/restaurants/:restaurantId/payment-settings (OWNER & ADMIN only)
+settingsRouter.put(
+  '/restaurants/:restaurantId/payment-settings',
+  validateUuidParams(['restaurantId']),
+  requireRestaurantAccess([Role.OWNER, Role.ADMIN]),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { restaurantId } = req.params;
+      const b = req.body || {};
+
+      const data: any = {};
+      if (b.cashEnabled !== undefined) data.cashPaymentEnabled = Boolean(b.cashEnabled);
+      if (b.cardEnabled !== undefined) data.cardPaymentEnabled = Boolean(b.cardEnabled);
+      if (b.mbwayEnabled !== undefined) data.mbwayPaymentEnabled = Boolean(b.mbwayEnabled);
+      if (b.stripeEnabled !== undefined) data.stripeEnabled = Boolean(b.stripeEnabled);
+      if (b.stripeAccountId !== undefined) data.stripeAccountId = b.stripeAccountId ? String(b.stripeAccountId).trim() : null;
+      if (b.stripePublishableKey !== undefined) data.stripePublishableKey = b.stripePublishableKey ? String(b.stripePublishableKey).trim() : null;
+      if (b.stripeSecretKey !== undefined) data.stripeSecretKeyEnc = b.stripeSecretKey ? encryptSecret(String(b.stripeSecretKey)) : null;
+      if (b.mbwayApiKey !== undefined) data.mbwayApiKeyEnc = b.mbwayApiKey ? encryptSecret(String(b.mbwayApiKey)) : null;
+
+      const settings = await prisma.restaurantSettings.upsert({
+        where: { restaurantId },
+        update: data,
+        create: {
+          restaurantId,
+          cashPaymentEnabled: data.cashPaymentEnabled ?? true,
+          cardPaymentEnabled: data.cardPaymentEnabled ?? true,
+          mbwayPaymentEnabled: data.mbwayPaymentEnabled ?? true,
+          stripeEnabled: data.stripeEnabled ?? false,
+          stripeAccountId: data.stripeAccountId,
+          stripeSecretKeyEnc: data.stripeSecretKeyEnc,
+          stripePublishableKey: data.stripePublishableKey,
+          mbwayApiKeyEnc: data.mbwayApiKeyEnc,
+        },
+      });
+
+      res.json({ success: true, data: sanitizeSettings(settings) });
     } catch (err) {
       next(err);
     }

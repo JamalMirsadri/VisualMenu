@@ -18,6 +18,7 @@ import {
   Eye,
   CreditCard,
   Banknote,
+  Wallet,
   UserCheck,
   Bell,
   Printer,
@@ -71,6 +72,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { to: '/admin/notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
     ...(role === 'OWNER' ? [{ to: '/admin/subscription', label: 'Subscription', icon: CreditCard }] : []),
     { to: '/admin/restaurant', label: 'Restaurant Settings', icon: Settings, permission: 'MANAGE_RESTAURANT_SETTINGS' },
+    { to: '/admin/payment-settings', label: 'Payment Settings', icon: Wallet, permission: 'MANAGE_RESTAURANT_SETTINGS' },
   ];
 
   const visibleNavItems = allNavItems.filter((item) => !item.permission || hasPermission(item.permission));

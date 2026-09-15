@@ -17,6 +17,7 @@ import { AdminMenuPreviewPage } from './pages/admin/AdminMenuPreviewPage';
 import { AdminRestaurantPage } from './pages/admin/AdminRestaurantPage';
 import { AdminQrPage } from './pages/admin/AdminQrPage';
 import { AdminPaymentsPage } from './pages/admin/AdminPaymentsPage';
+import { AdminPaymentSettingsPage } from './pages/admin/AdminPaymentSettingsPage';
 import { AdminCashPage } from './pages/admin/AdminCashPage';
 import { AdminCustomersPage } from './pages/admin/AdminCustomersPage';
 import { CustomerOrderTrackingPage } from './pages/customer/CustomerOrderTrackingPage';
@@ -99,6 +100,7 @@ export const App: React.FC = () => {
             <Route path="notifications" element={<AdminNotificationsPage />} />
             <Route path="restaurants" element={<Navigate to="/admin/restaurant" replace />} />
             <Route path="restaurant" element={<PermissionRoute permission="MANAGE_RESTAURANT_SETTINGS"><AdminRestaurantPage /></PermissionRoute>} />
+            <Route path="payment-settings" element={<PermissionRoute permission="MANAGE_RESTAURANT_SETTINGS"><AdminPaymentSettingsPage /></PermissionRoute>} />
             <Route path="qr" element={<PermissionRoute permission="VIEW_QR_CODES"><AdminQrPage /></PermissionRoute>} />
             <Route path="qr-print" element={<PermissionRoute permission="VIEW_QR_CODES"><AdminQrPrintPage /></PermissionRoute>} />
           </Route>
