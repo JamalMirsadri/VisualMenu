@@ -66,4 +66,12 @@ export const analyticsService = {
     const endpoint = `/restaurants/${restaurantId}/analytics/export?${buildQuery(query)}&${params.toString()}`;
     return downloadExport(endpoint, `analytics_${options.report}.${options.format}`);
   },
+
+  async getInsights(restaurantId: string, query: AnalyticsQuery): Promise<any> {
+    return apiClient.get(`/restaurants/${restaurantId}/ai-insights?${buildQuery(query)}`);
+  },
+
+  async exportInsights(restaurantId: string, query: AnalyticsQuery, format: 'csv' | 'xlsx'): Promise<void> {
+    return downloadExport(`/restaurants/${restaurantId}/ai-insights/export?${buildQuery(query)}&format=${format}`, `ai-insights.${format}`);
+  },
 };

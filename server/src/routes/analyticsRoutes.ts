@@ -3,6 +3,7 @@ import { authenticateToken, requirePermission } from '../middleware/authMiddlewa
 import { requireFeature } from '../middleware/featureMiddleware';
 import { validateUuidParams } from '../middleware/validation';
 import { AnalyticsService } from '../services/analytics/analyticsService';
+import { InsightService, flattenInsights } from '../services/insightService';
 import { buildCsv, buildXlsx, type ExportRow } from '../services/exportService';
 import type { AnalyticsPeriod } from '../services/analytics/periods';
 
@@ -124,6 +125,69 @@ analyticsRouter.get(
         return;
       }
 
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(buildCsv(headers, rows));
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/restaurants/:id/ai-insights
+ * Data-driven insights generated from the restaurant's real analytics (AI_INSIGHTS).
+ */
+analyticsRouter.get(
+  '/restaurants/:id/ai-insights',
+  validateUuidParams('id'),
+  authenticateToken,
+  requirePermission('VIEW_ORDERS'),
+  requireFeature('AI_INSIGHTS'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const filter = parseFilter(req);
+      const analytics = await AnalyticsService.getAnalytics(req.params.id, filter);
+      const result = InsightService.generateRestaurantInsights(analytics);
+      res.json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/restaurants/:id/ai-insights/export
+ * CSV / XLSX export of generated insights (AI_INSIGHTS).
+ */
+analyticsRouter.get(
+  '/restaurants/:id/ai-insights/export',
+  validateUuidParams('id'),
+  authenticateToken,
+  requirePermission('VIEW_ORDERS'),
+  requireFeature('AI_INSIGHTS'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const filter = parseFilter(req);
+      const format = String(req.query.format || 'csv');
+      if (!['csv', 'xlsx'].includes(format)) {
+        res.status(400).json({ success: false, errorCode: 'INVALID_EXPORT_FORMAT', message: 'Format must be one of: csv, xlsx.' });
+        return;
+      }
+      const analytics = await AnalyticsService.getAnalytics(req.params.id, filter);
+      const result = InsightService.generateRestaurantInsights(analytics);
+      const { headers, rows } = flattenInsights(result);
+
+      const ext = format === 'xlsx' ? 'xlsx' : 'csv';
+      const filename = `ai-insights.${ext}`;
+
+      if (format === 'xlsx') {
+        const buffer = await buildXlsx(headers, rows, 'AI Insights');
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(buffer);
+        return;
+      }
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.send(buildCsv(headers, rows));

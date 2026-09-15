@@ -12,6 +12,8 @@ import {
   Layers,
   Send,
   QrCode,
+  BarChart3,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { usePlatformSettings } from '../../context/PlatformSettingsContext';
@@ -31,6 +33,8 @@ export const PlatformSidebar: React.FC<PlatformSidebarProps> = ({ onItemClick })
     { to: '/platform/subscriptions/plans', label: 'Subscription Plans', icon: Layers },
     { to: '/platform/messages', label: 'Broadcast Messages', icon: Send },
     ...(isPlatformAdmin ? [{ to: '/platform/qr-templates', label: 'QR Templates', icon: QrCode }] : []),
+    ...(isPlatformAdmin ? [{ to: '/platform/analytics', label: 'Analytics', icon: BarChart3 }] : []),
+    ...(isPlatformAdmin ? [{ to: '/platform/ai-insights', label: 'AI Insights', icon: Sparkles }] : []),
     { to: '/platform/users', label: 'Platform Users', icon: Users },
     { to: '/platform/audit', label: 'Platform Audit Logs', icon: ShieldCheck },
     { to: '/platform/settings', label: 'Platform Settings', icon: Settings },

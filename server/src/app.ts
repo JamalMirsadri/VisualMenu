@@ -19,6 +19,7 @@ import { paymentRouter } from './routes/paymentRoutes';
 import { customerRouter } from './routes/customerRoutes';
 import { analyticsRouter } from './routes/analyticsRoutes';
 import { platformRouter } from './routes/platformRoutes';
+import { platformAnalyticsRouter } from './routes/platformAnalyticsRoutes';
 import { ownerInvitationRouter } from './routes/ownerInvitationRoutes';
 import { staffRouter } from './routes/staffRoutes';
 import { staffInvitationRouter } from './routes/staffInvitationRoutes';
@@ -109,6 +110,7 @@ app.use('/api', authenticateToken, requireActiveSubscription(), auditRouter);
 app.use('/api', authenticateToken, requireActiveSubscription(), qrTemplateRestaurantRouter);
 app.use('/api/platform', authenticateToken, platformRouter);
 app.use('/api/platform', authenticateToken, qrTemplateRouter);
+app.use('/api/platform', authenticateToken, platformAnalyticsRouter);
 
 // Centralized Error Handling
 app.use(errorHandler);

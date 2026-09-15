@@ -23,6 +23,7 @@ import {
   Bell,
   Printer,
   BarChart3,
+  Sparkles,
 } from 'lucide-react';
 import type { Restaurant } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -71,6 +72,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { to: '/admin/qr', label: 'QR Codes', icon: QrCode, permission: 'VIEW_QR_CODES' },
     { to: '/admin/qr-print', label: 'QR Print Studio', icon: Printer, permission: 'VIEW_QR_CODES' },
     { to: '/admin/analytics', label: 'Analytics & Reports', icon: BarChart3, permission: 'VIEW_ORDERS', feature: 'ADVANCED_ANALYTICS' },
+    { to: '/admin/ai-insights', label: 'AI Insights', icon: Sparkles, permission: 'VIEW_ORDERS', feature: 'AI_INSIGHTS' },
     { to: '/admin/staff', label: 'Staff & Roles', icon: Users, permission: 'VIEW_STAFF', badgeKey: 'staffInvitations' },
     { to: '/admin/notifications', label: 'Notifications', icon: Bell, badgeKey: 'notifications' },
     ...(role === 'OWNER' ? [{ to: '/admin/subscription', label: 'Subscription', icon: CreditCard }] : []),

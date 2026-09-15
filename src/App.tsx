@@ -40,8 +40,11 @@ import { SubscriptionRequiredPage } from './pages/admin/SubscriptionRequiredPage
 import { PlatformSubscriptionPlansPage } from './pages/platform/PlatformSubscriptionPlansPage';
 import { PlatformMessagesPage } from './pages/platform/PlatformMessagesPage';
 import { PlatformQrTemplatesPage } from './pages/platform/PlatformQrTemplatesPage';
+import { PlatformAnalyticsPage } from './pages/platform/PlatformAnalyticsPage';
+import { PlatformAiInsightsPage } from './pages/platform/PlatformAiInsightsPage';
 import { AdminQrPrintPage } from './pages/admin/AdminQrPrintPage';
 import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
+import { AdminAiInsightsPage } from './pages/admin/AdminAiInsightsPage';
 import { PermissionRoute } from './components/common/PermissionRoute';
 import { FeatureGate } from './components/admin/FeatureGate';
 
@@ -106,6 +109,7 @@ export const App: React.FC = () => {
             <Route path="qr" element={<PermissionRoute permission="VIEW_QR_CODES"><AdminQrPage /></PermissionRoute>} />
             <Route path="qr-print" element={<PermissionRoute permission="VIEW_QR_CODES"><AdminQrPrintPage /></PermissionRoute>} />
             <Route path="analytics" element={<FeatureGate feature="ADVANCED_ANALYTICS"><AdminAnalyticsPage /></FeatureGate>} />
+            <Route path="ai-insights" element={<FeatureGate feature="AI_INSIGHTS"><AdminAiInsightsPage /></FeatureGate>} />
           </Route>
 
           {/* Platform SaaS Management Panel */}
@@ -127,6 +131,8 @@ export const App: React.FC = () => {
             <Route path="users" element={<PlatformUsersPage />} />
             <Route path="audit" element={<PlatformAuditPage />} />
             <Route path="settings" element={<PlatformSettingsPage />} />
+            <Route path="analytics" element={<PlatformAnalyticsPage />} />
+            <Route path="ai-insights" element={<PlatformAiInsightsPage />} />
           </Route>
 
           {/* Root Redirects to demo restaurant */}
