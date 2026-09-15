@@ -41,7 +41,9 @@ import { PlatformSubscriptionPlansPage } from './pages/platform/PlatformSubscrip
 import { PlatformMessagesPage } from './pages/platform/PlatformMessagesPage';
 import { PlatformQrTemplatesPage } from './pages/platform/PlatformQrTemplatesPage';
 import { AdminQrPrintPage } from './pages/admin/AdminQrPrintPage';
+import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
 import { PermissionRoute } from './components/common/PermissionRoute';
+import { FeatureGate } from './components/admin/FeatureGate';
 
 export const App: React.FC = () => {
   return (
@@ -103,6 +105,7 @@ export const App: React.FC = () => {
             <Route path="payment-settings" element={<PermissionRoute permission="MANAGE_RESTAURANT_SETTINGS"><AdminPaymentSettingsPage /></PermissionRoute>} />
             <Route path="qr" element={<PermissionRoute permission="VIEW_QR_CODES"><AdminQrPage /></PermissionRoute>} />
             <Route path="qr-print" element={<PermissionRoute permission="VIEW_QR_CODES"><AdminQrPrintPage /></PermissionRoute>} />
+            <Route path="analytics" element={<FeatureGate feature="ADVANCED_ANALYTICS"><AdminAnalyticsPage /></FeatureGate>} />
           </Route>
 
           {/* Platform SaaS Management Panel */}

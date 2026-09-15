@@ -12,6 +12,13 @@ enum MediaType {
   VIDEO
 }
 
+enum AnalyticsType {
+  FOOD
+  DRINK
+  DESSERT
+  OTHER
+}
+
 enum QrTargetType {
   RESTAURANT_MENU
   TABLE_MENU
@@ -346,6 +353,7 @@ model FoodItem {
   currency        String    @default("EUR")
   available       Boolean   @default(true)
   featured        Boolean   @default(false)
+  analyticsType   AnalyticsType? @map("analytics_type")
   spicyLevel      Int       @default(0) @map("spicy_level")
   preparationTime Int?      @map("preparation_time")
   displayOrder    Int       @default(0) @map("display_order")

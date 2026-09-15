@@ -397,6 +397,7 @@ export interface FoodItem {
   preparationTime?: number; // minutes
   available: boolean;
   featured: boolean;
+  analyticsType?: 'FOOD' | 'DRINK' | 'DESSERT' | 'OTHER' | null;
   order: number;
   calories?: number;
 }

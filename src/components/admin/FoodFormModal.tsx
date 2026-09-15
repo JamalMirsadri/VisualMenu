@@ -93,6 +93,7 @@ export const FoodFormModal: React.FC<FoodFormModalProps> = ({
   const [calories, setCalories] = useState<number | ''>('');
   const [available, setAvailable] = useState(true);
   const [featured, setFeatured] = useState(false);
+  const [analyticsType, setAnalyticsType] = useState<'FOOD' | 'DRINK' | 'DESSERT' | 'OTHER'>('FOOD');
   const [order, setOrder] = useState<number>(1);
   const [error, setError] = useState('');
 
@@ -117,6 +118,7 @@ export const FoodFormModal: React.FC<FoodFormModalProps> = ({
       setCalories(food.calories || '');
       setAvailable(food.available);
       setFeatured(food.featured);
+      setAnalyticsType(food.analyticsType || 'FOOD');
       setOrder(food.order);
     } else {
       setName('');
@@ -136,6 +138,7 @@ export const FoodFormModal: React.FC<FoodFormModalProps> = ({
       setCalories('');
       setAvailable(true);
       setFeatured(false);
+      setAnalyticsType('FOOD');
       setOrder(1);
     }
     setImageInputMode('upload');
@@ -288,6 +291,7 @@ export const FoodFormModal: React.FC<FoodFormModalProps> = ({
       calories: calories !== '' ? Number(calories) : undefined,
       available,
       featured,
+      analyticsType,
       order: Number(order) || 1,
     });
     onClose();
@@ -444,6 +448,26 @@ export const FoodFormModal: React.FC<FoodFormModalProps> = ({
               placeholder="Sensory culinary profile, origins, preparation method..."
               className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400 text-sm"
             />
+          </div>
+
+          {/* Analytics Type (reporting classification, independent of Category) */}
+          <div>
+            <label className="block text-[11px] uppercase tracking-wider text-zinc-400 mb-1 font-medium">
+              Analytics Type
+            </label>
+            <select
+              value={analyticsType}
+              onChange={(e) => setAnalyticsType(e.target.value as any)}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-white focus:outline-none focus:border-amber-400 text-sm"
+            >
+              <option value="FOOD">Food</option>
+              <option value="DRINK">Drink</option>
+              <option value="DESSERT">Dessert</option>
+              <option value="OTHER">Other</option>
+            </select>
+            <p className="text-[10px] text-zinc-500 mt-1">
+              Used only for Analytics &amp; Reports classification. Does not change your menu categories.
+            </p>
           </div>
 
           {/* ========================================================================= */}

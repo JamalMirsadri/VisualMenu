@@ -17,6 +17,7 @@ import { userRouter } from './routes/userRoutes';
 import { auditRouter } from './routes/auditRoutes';
 import { paymentRouter } from './routes/paymentRoutes';
 import { customerRouter } from './routes/customerRoutes';
+import { analyticsRouter } from './routes/analyticsRoutes';
 import { platformRouter } from './routes/platformRoutes';
 import { ownerInvitationRouter } from './routes/ownerInvitationRoutes';
 import { staffRouter } from './routes/staffRoutes';
@@ -88,6 +89,7 @@ app.use('/api', realtimeRouter); // Includes public /orders/track/:token/events 
 app.use('/api', orderRouter); // Includes public POST /api/orders, cash settlement, receipts and customer order tracking
 app.use('/api', paymentRouter); // Includes public /payments, /payments/:id, webhooks and protected admin /restaurants/:id/payments
 app.use('/api', customerRouter); // Includes public fiscal profile save and protected admin customer directory
+app.use('/api', authenticateToken, requireActiveSubscription(), analyticsRouter);
 
 // -----------------------------------------------------------------------------
 // 2. PROTECTED ADMIN & MANAGEMENT ROUTES (Enforced server-side)

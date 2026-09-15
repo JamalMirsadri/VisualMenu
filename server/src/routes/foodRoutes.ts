@@ -56,6 +56,7 @@ foodRouter.get(
           currencySymbol: '€',
           available: f.available,
           featured: f.featured,
+          analyticsType: f.analyticsType,
           spicyLevel: f.spicyLevel,
           preparationTime: f.preparationTime || undefined,
           displayOrder: f.displayOrder,
@@ -119,6 +120,7 @@ foodRouter.get(
           currency: f.currency,
           available: f.available,
           featured: f.featured,
+          analyticsType: f.analyticsType,
           spicyLevel: f.spicyLevel,
           preparationTime: f.preparationTime || undefined,
           displayOrder: f.displayOrder,
@@ -166,6 +168,7 @@ foodRouter.post(
         allergens,
         image,
         video,
+        analyticsType,
       } = req.body;
 
       if (!categoryId || !name || price === undefined) {
@@ -253,6 +256,7 @@ foodRouter.post(
             calories: calories ? Number(calories) : null,
             ingredients: Array.isArray(ingredients) ? ingredients : [],
             allergens: Array.isArray(allergens) ? allergens : [],
+            analyticsType: ['FOOD', 'DRINK', 'DESSERT', 'OTHER'].includes(analyticsType) ? analyticsType : 'FOOD',
           },
         });
 
@@ -341,6 +345,7 @@ foodRouter.put(
         allergens,
         image,
         video,
+        analyticsType,
       } = req.body;
 
       const existing = await prisma.foodItem.findUnique({ where: { id } });
@@ -405,6 +410,7 @@ foodRouter.put(
             calories: calories !== undefined ? (calories ? Number(calories) : null) : undefined,
             ingredients: Array.isArray(ingredients) ? ingredients : undefined,
             allergens: Array.isArray(allergens) ? allergens : undefined,
+            analyticsType: analyticsType !== undefined ? (['FOOD', 'DRINK', 'DESSERT', 'OTHER'].includes(analyticsType) ? analyticsType : null) : undefined,
           },
         });
 
@@ -689,6 +695,7 @@ foodRouter.post(
             calories: source.calories,
             ingredients: source.ingredients,
             allergens: source.allergens,
+            analyticsType: source.analyticsType,
           },
         });
 
