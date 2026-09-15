@@ -38,6 +38,8 @@ import { AdminNotificationsPage } from './pages/admin/AdminNotificationsPage';
 import { SubscriptionRequiredPage } from './pages/admin/SubscriptionRequiredPage';
 import { PlatformSubscriptionPlansPage } from './pages/platform/PlatformSubscriptionPlansPage';
 import { PlatformMessagesPage } from './pages/platform/PlatformMessagesPage';
+import { PlatformQrTemplatesPage } from './pages/platform/PlatformQrTemplatesPage';
+import { AdminQrPrintPage } from './pages/admin/AdminQrPrintPage';
 import { PermissionRoute } from './components/common/PermissionRoute';
 
 export const App: React.FC = () => {
@@ -98,6 +100,7 @@ export const App: React.FC = () => {
             <Route path="restaurants" element={<Navigate to="/admin/restaurant" replace />} />
             <Route path="restaurant" element={<PermissionRoute permission="MANAGE_RESTAURANT_SETTINGS"><AdminRestaurantPage /></PermissionRoute>} />
             <Route path="qr" element={<PermissionRoute permission="VIEW_QR_CODES"><AdminQrPage /></PermissionRoute>} />
+            <Route path="qr-print" element={<PermissionRoute permission="VIEW_QR_CODES"><AdminQrPrintPage /></PermissionRoute>} />
           </Route>
 
           {/* Platform SaaS Management Panel */}
@@ -115,6 +118,7 @@ export const App: React.FC = () => {
             <Route path="restaurants/:id" element={<PlatformRestaurantDetailPage />} />
             <Route path="subscriptions/plans" element={<PlatformSubscriptionPlansPage />} />
             <Route path="messages" element={<PlatformMessagesPage />} />
+            <Route path="qr-templates" element={<PlatformQrTemplatesPage />} />
             <Route path="users" element={<PlatformUsersPage />} />
             <Route path="audit" element={<PlatformAuditPage />} />
             <Route path="settings" element={<PlatformSettingsPage />} />

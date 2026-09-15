@@ -928,6 +928,33 @@ model PlatformSettings {
 }
 
 // -----------------------------------------------------------------------------
+// QR PRINT TEMPLATE SYSTEM
+// Platform-owned print templates. Templates contain only the fixed
+// background/design; restaurant data (logo, name, table, QR) is overlaid at
+// print time and never stored inside a template.
+// -----------------------------------------------------------------------------
+
+enum QrPrintLayout {
+  A4
+  CARD
+}
+
+model QrPrintTemplate {
+  id            String        @id @default(uuid()) @db.Uuid
+  name          String
+  description   String?       @db.Text
+  backgroundUrl String?       @map("background_url")
+  layout        QrPrintLayout @default(CARD)
+  active        Boolean       @default(true)
+  createdById   String?       @map("created_by_id") @db.Uuid
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@index([active])
+  @@map("qr_print_templates")
+}
+
+// -----------------------------------------------------------------------------
 // SUBSCRIPTION BILLING DOMAIN (Phase 13A)
 // Completely separate from restaurant order payment lifecycle.
 // -----------------------------------------------------------------------------

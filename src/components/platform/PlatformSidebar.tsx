@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Layers,
   Send,
+  QrCode,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { usePlatformSettings } from '../../context/PlatformSettingsContext';
@@ -20,7 +21,7 @@ interface PlatformSidebarProps {
 }
 
 export const PlatformSidebar: React.FC<PlatformSidebarProps> = ({ onItemClick }) => {
-  const { user, platformRole, logout, restaurants, activeRestaurant } = useAuth();
+  const { user, platformRole, logout, restaurants, activeRestaurant, isPlatformAdmin } = useAuth();
   const { platformName, branding } = usePlatformSettings();
   const navigate = useNavigate();
 
@@ -29,6 +30,7 @@ export const PlatformSidebar: React.FC<PlatformSidebarProps> = ({ onItemClick })
     { to: '/platform/restaurants', label: 'Restaurants Directory', icon: Building2 },
     { to: '/platform/subscriptions/plans', label: 'Subscription Plans', icon: Layers },
     { to: '/platform/messages', label: 'Broadcast Messages', icon: Send },
+    ...(isPlatformAdmin ? [{ to: '/platform/qr-templates', label: 'QR Templates', icon: QrCode }] : []),
     { to: '/platform/users', label: 'Platform Users', icon: Users },
     { to: '/platform/audit', label: 'Platform Audit Logs', icon: ShieldCheck },
     { to: '/platform/settings', label: 'Platform Settings', icon: Settings },
