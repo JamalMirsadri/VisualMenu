@@ -234,19 +234,33 @@ export const AdminQrPrintPage: React.FC = () => {
                   backgroundColor: '#18181b',
                 }}
               >
-                <div className="absolute inset-0 flex items-center justify-between p-4">
-                  <div className="flex flex-col gap-1 text-white">
-                    {restaurant.logo && (
-                      <img src={restaurant.logo} alt="" className="w-10 h-10 rounded-full object-cover bg-white" />
-                    )}
-                    <span className="text-sm font-bold drop-shadow">{restaurant.name}</span>
-                    <span className="text-xs drop-shadow">Table {selectedTables[0].name}</span>
+                <div className="absolute inset-0 flex items-center gap-4 p-4">
+                  {/* LEFT: gold-framed QR square */}
+                  <div
+                    className="h-full aspect-square shrink-0 flex items-center justify-center rounded-md bg-white p-2"
+                    style={{ border: '2px solid #d4af37' }}
+                  >
+                    <img
+                      src={getQrImageUrl(`${fullMenuUrl}/table/${selectedTables[0].number}`, 240)}
+                      alt="Table QR"
+                      className="w-full h-full object-contain"
+                    />
                   </div>
-                  <img
-                    src={getQrImageUrl(`${fullMenuUrl}/table/${selectedTables[0].number}`, 160)}
-                    alt="QR"
-                    className="w-20 h-20 bg-white rounded-md"
-                  />
+                  {/* RIGHT: dynamic content */}
+                  <div className="flex-1 min-w-0 flex flex-col justify-center gap-1 text-white">
+                    {restaurant.logo && (
+                      <img
+                        src={restaurant.logo}
+                        alt="Restaurant logo"
+                        className="h-10 w-auto max-w-full object-contain self-start"
+                      />
+                    )}
+                    <span className="text-base font-bold leading-tight drop-shadow truncate">{restaurant.name}</span>
+                    <span className="text-sm drop-shadow truncate">{selectedTables[0].name}</span>
+                    <span className="text-xs font-semibold drop-shadow" style={{ color: '#d4af37' }}>
+                      No. {selectedTables[0].number}
+                    </span>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -277,19 +291,41 @@ export const AdminQrPrintPage: React.FC = () => {
                 margin: '0 0 4mm 0',
               }}
             >
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8mm' }}>
-                <div style={{ color: '#111', display: 'flex', flexDirection: 'column', gap: '2mm' }}>
-                  {restaurant.logo && (
-                    <img src={restaurant.logo} alt="" style={{ width: '14mm', height: '14mm', borderRadius: '50%', objectFit: 'cover' }} />
-                  )}
-                  <span style={{ fontSize: '4mm', fontWeight: 700 }}>{restaurant.name}</span>
-                  <span style={{ fontSize: '3mm' }}>Table {t.name}</span>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', gap: '6mm', padding: '6mm' }}>
+                {/* LEFT: gold-framed QR square */}
+                <div
+                  style={{
+                    height: '42mm',
+                    width: '42mm',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1.5mm solid #d4af37',
+                    background: '#ffffff',
+                    padding: '2mm',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <img
+                    src={getQrImageUrl(`${fullMenuUrl}/table/${t.number}`, 600)}
+                    alt="Table QR"
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
                 </div>
-                <img
-                  src={getQrImageUrl(`${fullMenuUrl}/table/${t.number}`, 480)}
-                  alt="QR"
-                  style={{ width: '34mm', height: '34mm', background: '#fff', borderRadius: '2mm' }}
-                />
+                {/* RIGHT: dynamic content */}
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '2mm', color: '#111' }}>
+                  {restaurant.logo && (
+                    <img
+                      src={restaurant.logo}
+                      alt=""
+                      style={{ height: '12mm', width: 'auto', maxWidth: '100%', objectFit: 'contain', alignSelf: 'flex-start' }}
+                    />
+                  )}
+                  <span style={{ fontSize: '4mm', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{restaurant.name}</span>
+                  <span style={{ fontSize: '3.5mm', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
+                  <span style={{ fontSize: '3mm', fontWeight: 600, color: '#8a6d1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>No. {t.number}</span>
+                </div>
               </div>
             </div>
           ))}
