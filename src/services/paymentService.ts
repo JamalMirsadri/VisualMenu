@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { API_BASE_URL, getAuthToken } from '../config';
 import type { Payment, FiscalDocument, Customer, PaymentMethod } from '../types';
 
 export interface InitiatePaymentParams {
@@ -33,6 +34,44 @@ export interface PaymentQueryParams {
   endDate?: string;
   page?: number;
   limit?: number;
+}
+
+export interface ExportParams {
+  period: 'day' | 'month' | 'year';
+  date: string;
+  format: 'csv' | 'xlsx';
+}
+
+async function downloadExport(endpoint: string, fallbackFilename: string): Promise<void> {
+  const token = getAuthToken();
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ message: `Export failed with status ${response.status}` }));
+    const err = new Error(data.message || `Export failed with status ${response.status}`) as Error & {
+      errorCode?: string;
+      status?: number;
+    };
+    err.errorCode = data.errorCode;
+    err.status = response.status;
+    throw err;
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  const filename = match?.[1] || fallbackFilename;
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 export const paymentService = {
@@ -167,5 +206,31 @@ export const paymentService = {
   // Single customer details (Admin)
   async getCustomer(restaurantId: string, customerId: string): Promise<Customer> {
     return apiClient.get<Customer>(`/restaurants/${restaurantId}/customers/${customerId}`);
+  },
+
+  // Export payments as CSV or XLSX for a Day / Month / Year period.
+  async exportPayments(restaurantId: string, params: ExportParams): Promise<void> {
+    const query = new URLSearchParams({
+      period: params.period,
+      date: params.date,
+      format: params.format,
+    });
+    return downloadExport(
+      `/restaurants/${restaurantId}/payments/export?${query.toString()}`,
+      `payments.${params.format}`
+    );
+  },
+
+  // Export cash register records as CSV or XLSX for a Day / Month / Year period.
+  async exportCashRegister(restaurantId: string, params: ExportParams): Promise<void> {
+    const query = new URLSearchParams({
+      period: params.period,
+      date: params.date,
+      format: params.format,
+    });
+    return downloadExport(
+      `/restaurants/${restaurantId}/cash-operations/export?${query.toString()}`,
+      `cash-register.${params.format}`
+    );
   },
 };

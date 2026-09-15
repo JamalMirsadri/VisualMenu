@@ -14,9 +14,11 @@ import {
   AlertCircle,
   X,
   Printer,
+  Download,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { paymentService } from '../../services/paymentService';
+import { ExportDialog } from '../../components/admin/ExportDialog';
 import type { Payment, PaymentMethod, PaymentStatus, FiscalDocument } from '../../types';
 
 export const AdminPaymentsPage: React.FC = () => {
@@ -54,6 +56,9 @@ export const AdminPaymentsPage: React.FC = () => {
 
   // Receipt Modal State
   const [selectedReceipt, setSelectedReceipt] = useState<FiscalDocument | null>(null);
+
+  // Export Modal State
+  const [exportOpen, setExportOpen] = useState(false);
 
   const fetchPayments = async () => {
     if (!activeRestaurant?.id) return;
@@ -175,14 +180,24 @@ export const AdminPaymentsPage: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={fetchPayments}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 border border-zinc-700 transition"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setExportOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 text-xs font-bold border border-amber-500 transition"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export</span>
+          </button>
+
+          <button
+            onClick={fetchPayments}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 border border-zinc-700 transition"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* Financial Summary Cards */}
@@ -605,6 +620,17 @@ export const AdminPaymentsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Export Dialog */}
+      <ExportDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        title="Export Payments"
+        onExport={(params) => {
+          if (!activeRestaurant?.id) return Promise.reject(new Error('No active restaurant.'));
+          return paymentService.exportPayments(activeRestaurant.id, params);
+        }}
+      />
     </div>
   );
 };

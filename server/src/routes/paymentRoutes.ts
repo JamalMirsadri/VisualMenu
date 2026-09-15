@@ -8,8 +8,33 @@ import { paymentCreationRateLimiter } from '../middleware/rateLimiter';
 import { validateUuidParams } from '../middleware/validation';
 import { hasPermission } from '../constants/permissions';
 import { requireActiveSubscription, requireRestaurantServiceActive } from '../middleware/subscriptionMiddleware';
+import { resolvePeriodBounds, buildCsv, buildXlsx, type ExportPeriod, type ExportFormat, type ExportRow } from '../services/exportService';
 
 export const paymentRouter = Router();
+
+async function sendExportFile(
+  res: Response,
+  format: ExportFormat,
+  headers: string[],
+  rows: ExportRow[],
+  filenameBase: string
+): Promise<void> {
+  const ext = format === 'xlsx' ? 'xlsx' : 'csv';
+  const filename = `${filenameBase}.${ext}`;
+
+  if (format === 'xlsx') {
+    const buffer = await buildXlsx(headers, rows, filenameBase);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
+    return;
+  }
+
+  const csv = buildCsv(headers, rows);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(csv);
+}
 
 // =============================================================================
 // PUBLIC / DINER PAYMENT INITIATION & DETAILS
@@ -509,6 +534,173 @@ paymentRouter.get(
           totalPages: Math.ceil(total / limitNum),
         },
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/restaurants/:id/payments/export
+ * Tenant-scoped CSV / XLSX export of payment records for a Day / Month / Year period.
+ */
+paymentRouter.get(
+  '/restaurants/:id/payments/export',
+  validateUuidParams('id'),
+  authenticateToken,
+  requirePermission('VIEW_PAYMENTS'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id: restaurantId } = req.params;
+      const period = String(req.query.period || 'day') as ExportPeriod;
+      const dateValue = req.query.date ? String(req.query.date) : undefined;
+      const format = String(req.query.format || 'csv') as ExportFormat;
+
+      if (!['day', 'month', 'year'].includes(period)) {
+        res.status(400).json({ success: false, errorCode: 'INVALID_EXPORT_PERIOD', message: 'Period must be one of: day, month, year.' });
+        return;
+      }
+      if (!['csv', 'xlsx'].includes(format)) {
+        res.status(400).json({ success: false, errorCode: 'INVALID_EXPORT_FORMAT', message: 'Format must be one of: csv, xlsx.' });
+        return;
+      }
+
+      const restaurant = await prisma.restaurant.findUnique({
+        where: { id: restaurantId },
+        select: { id: true, timezone: true },
+      });
+      if (!restaurant) {
+        res.status(404).json({ success: false, errorCode: 'RESTAURANT_NOT_FOUND', message: 'Restaurant not found.' });
+        return;
+      }
+
+      const bounds = resolvePeriodBounds(period, dateValue, restaurant.timezone || 'UTC');
+
+      const payments = await prisma.payment.findMany({
+        where: {
+          restaurantId,
+          createdAt: { gte: bounds.start, lt: bounds.end },
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          order: { select: { orderNumber: true } },
+          receivedByUser: { select: { name: true } },
+        },
+      });
+
+      const headers = [
+        'Payment ID',
+        'Order #',
+        'Method',
+        'Provider',
+        'Status',
+        'Amount',
+        'Currency',
+        'Amount Received',
+        'Change Given',
+        'Provider Payment ID',
+        'Staff',
+        'Completed At',
+        'Created At',
+      ];
+
+      const rows: ExportRow[] = payments.map((p) => ({
+        'Payment ID': p.id,
+        'Order #': p.order?.orderNumber ?? '',
+        Method: p.method,
+        Provider: p.provider,
+        Status: p.status,
+        Amount: Number(p.amount),
+        Currency: p.currency,
+        'Amount Received': p.amountReceived != null ? Number(p.amountReceived) : '',
+        'Change Given': p.changeGiven != null ? Number(p.changeGiven) : '',
+        'Provider Payment ID': p.providerPaymentId ?? '',
+        Staff: p.receivedByUser?.name ?? '',
+        'Completed At': p.completedAt ? p.completedAt.toISOString() : '',
+        'Created At': p.createdAt.toISOString(),
+      }));
+
+      await sendExportFile(res, format, headers, rows, `payments_${bounds.filenameDate}`);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/restaurants/:id/cash-operations/export
+ * Tenant-scoped CSV / XLSX export of cash register records for a Day / Month / Year period.
+ */
+paymentRouter.get(
+  '/restaurants/:id/cash-operations/export',
+  validateUuidParams('id'),
+  authenticateToken,
+  requirePermission('VIEW_PAYMENTS'),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id: restaurantId } = req.params;
+      const period = String(req.query.period || 'day') as ExportPeriod;
+      const dateValue = req.query.date ? String(req.query.date) : undefined;
+      const format = String(req.query.format || 'csv') as ExportFormat;
+
+      if (!['day', 'month', 'year'].includes(period)) {
+        res.status(400).json({ success: false, errorCode: 'INVALID_EXPORT_PERIOD', message: 'Period must be one of: day, month, year.' });
+        return;
+      }
+      if (!['csv', 'xlsx'].includes(format)) {
+        res.status(400).json({ success: false, errorCode: 'INVALID_EXPORT_FORMAT', message: 'Format must be one of: csv, xlsx.' });
+        return;
+      }
+
+      const restaurant = await prisma.restaurant.findUnique({
+        where: { id: restaurantId },
+        select: { id: true, timezone: true },
+      });
+      if (!restaurant) {
+        res.status(404).json({ success: false, errorCode: 'RESTAURANT_NOT_FOUND', message: 'Restaurant not found.' });
+        return;
+      }
+
+      const bounds = resolvePeriodBounds(period, dateValue, restaurant.timezone || 'UTC');
+
+      const payments = await prisma.payment.findMany({
+        where: {
+          restaurantId,
+          method: PaymentMethod.CASH,
+          createdAt: { gte: bounds.start, lt: bounds.end },
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          order: { select: { orderNumber: true } },
+          receivedByUser: { select: { name: true } },
+        },
+      });
+
+      const headers = [
+        'Time',
+        'Order #',
+        'Total Due',
+        'Amount Tendered',
+        'Change Given',
+        'Net Cash',
+        'Settled By',
+        'Status',
+        'Completed At',
+      ];
+
+      const rows: ExportRow[] = payments.map((p) => ({
+        Time: p.createdAt.toISOString(),
+        'Order #': p.order?.orderNumber ?? '',
+        'Total Due': Number(p.amount),
+        'Amount Tendered': Number(p.amountReceived ?? p.amount),
+        'Change Given': Number(p.changeGiven ?? 0),
+        'Net Cash': Number(p.amount),
+        'Settled By': p.receivedByUser?.name ?? '',
+        Status: p.status,
+        'Completed At': p.completedAt ? p.completedAt.toISOString() : '',
+      }));
+
+      await sendExportFile(res, format, headers, rows, `cash-register_${bounds.filenameDate}`);
     } catch (err) {
       next(err);
     }
