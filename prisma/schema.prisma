@@ -985,6 +985,7 @@ model SubscriptionPlan {
   trialDays        Int?            @map("trial_days")
   gracePeriodDays  Int             @default(7) @map("grace_period_days")
   active           Boolean         @default(true)
+  features         String[]        @default([]) @map("features")
   createdAt        DateTime        @default(now()) @map("created_at")
   updatedAt        DateTime        @updatedAt @map("updated_at")
 

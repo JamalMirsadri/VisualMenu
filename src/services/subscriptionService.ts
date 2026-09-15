@@ -23,6 +23,7 @@ export interface SubscriptionPlan {
   trialDays?: number | null;
   gracePeriodDays: number;
   active: boolean;
+  features?: string[];
 }
 
 export interface SubscriptionDetails {

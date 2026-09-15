@@ -18,6 +18,8 @@ interface AuthContextType {
   subscriptionStatus: SubscriptionStatus | null;
   subscriptionPlan: string | null;
   subscriptionDaysRemaining: number | null;
+  features: string[];
+  hasFeature: (feature: string) => boolean;
   subscriptionLoading: boolean;
   refreshSubscription: () => Promise<void>;
   isAuthenticated: boolean;
@@ -67,6 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
   const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
   const [subscriptionDaysRemaining, setSubscriptionDaysRemaining] = useState<number | null>(null);
+  const [features, setFeatures] = useState<string[]>([]);
   const [subscriptionLoading, setSubscriptionLoading] = useState(true);
 
   const initAuth = useCallback(async () => {
@@ -129,6 +132,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSubscriptionStatus(sub.status);
       setSubscriptionPlan(sub.plan?.name || null);
       setSubscriptionDaysRemaining(sub.daysRemaining ?? null);
+      setFeatures(sub.plan?.features || []);
     } catch (err: any) {
       if (err.errorCode === 'SUBSCRIPTION_REQUIRED' || err.status === 402) {
         setSubscriptionStatus('EXPIRED');
@@ -137,6 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setSubscriptionPlan(null);
       setSubscriptionDaysRemaining(null);
+      setFeatures([]);
     } finally {
       setSubscriptionLoading(false);
     }
@@ -247,6 +252,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return false;
   }, [isPlatformAdmin, platformViewingRestaurant, role, effectiveRestaurant]);
 
+  const hasFeature = useCallback((feature: string): boolean => {
+    if (isPlatformAdmin || Boolean(platformViewingRestaurant)) return true;
+    return features.includes(feature);
+  }, [isPlatformAdmin, platformViewingRestaurant, features]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -263,6 +273,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         subscriptionStatus,
         subscriptionPlan,
         subscriptionDaysRemaining,
+        features,
+        hasFeature,
         subscriptionLoading,
         refreshSubscription,
         isAuthenticated: Boolean(user && authService.getToken()),

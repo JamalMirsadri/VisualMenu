@@ -10,6 +10,7 @@ import { PlatformMessageService } from '../services/platformMessageService';
 import { requirePlatformRole } from '../middleware/authMiddleware';
 import { validateUuidParams } from '../middleware/validation';
 import { getStorageProvider } from '../services/storageProvider';
+import { sanitizeFeatureKeys } from '../constants/features';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -1192,6 +1193,7 @@ platformRouter.post(
           trialDays: trialDays !== undefined ? trialDays : null,
           gracePeriodDays: gracePeriodDays !== undefined ? gracePeriodDays : 7,
           active: true,
+          features: sanitizeFeatureKeys(req.body.features),
         },
       });
       res.status(201).json({ success: true, data: plan });
@@ -1220,6 +1222,7 @@ platformRouter.put(
           ...(price !== undefined ? { price } : {}),
           ...(gracePeriodDays !== undefined ? { gracePeriodDays } : {}),
           ...(trialDays !== undefined ? { trialDays } : {}),
+          ...(req.body.features !== undefined ? { features: sanitizeFeatureKeys(req.body.features) } : {}),
         },
       });
       res.json({ success: true, data: plan });

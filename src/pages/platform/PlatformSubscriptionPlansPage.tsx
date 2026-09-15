@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiClient } from '../../services/apiClient';
 import type { SubscriptionPlan } from '../../services/subscriptionService';
+import { FEATURE_KEYS, FEATURE_LABELS } from '../../constants/features';
 import {
   Layers,
   Plus,
@@ -10,6 +11,7 @@ import {
   RefreshCw,
   CheckCircle2,
   ShieldAlert,
+  Sparkles,
 } from 'lucide-react';
 
 export const PlatformSubscriptionPlansPage: React.FC = () => {
@@ -28,6 +30,7 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
   const [billingInterval, setBillingInterval] = useState<'MONTHLY' | 'YEARLY'>('MONTHLY');
   const [trialDays, setTrialDays] = useState('14');
   const [gracePeriodDays, setGracePeriodDays] = useState('7');
+  const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const loadPlans = async () => {
@@ -56,6 +59,7 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
     setBillingInterval('MONTHLY');
     setTrialDays('14');
     setGracePeriodDays('7');
+    setSelectedFeatures([]);
     setModalOpen(true);
   };
 
@@ -69,6 +73,7 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
     setBillingInterval(plan.billingInterval);
     setTrialDays(plan.trialDays !== null && plan.trialDays !== undefined ? String(plan.trialDays) : '');
     setGracePeriodDays(String(plan.gracePeriodDays));
+    setSelectedFeatures(plan.features || []);
     setModalOpen(true);
   };
 
@@ -85,6 +90,7 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
           price: parseFloat(price),
           trialDays: trialDays ? parseInt(trialDays, 10) : null,
           gracePeriodDays: parseInt(gracePeriodDays, 10),
+          features: selectedFeatures,
         });
         setFeedback({ type: 'success', message: `Plan ${name} updated successfully.` });
       } else {
@@ -98,6 +104,7 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
           billingInterval,
           trialDays: trialDays ? parseInt(trialDays, 10) : null,
           gracePeriodDays: parseInt(gracePeriodDays, 10),
+          features: selectedFeatures,
         });
         setFeedback({ type: 'success', message: `Plan ${name} created successfully.` });
       }
@@ -108,6 +115,12 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const toggleFeature = (feature: string) => {
+    setSelectedFeatures((prev) =>
+      prev.includes(feature) ? prev.filter((f) => f !== feature) : [...prev, feature]
+    );
   };
 
   const handleToggleActive = async (plan: SubscriptionPlan) => {
@@ -227,6 +240,24 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
                     </span>
                   </div>
                 </div>
+
+                <div className="mt-3 pt-3 border-t border-zinc-800">
+                  <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">Features</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(p.features || []).length === 0 ? (
+                      <span className="text-[11px] text-zinc-500">None</span>
+                    ) : (
+                      (p.features || []).map((f) => (
+                        <span
+                          key={f}
+                          className="px-2 py-0.5 rounded-full text-[10px] bg-zinc-800 text-zinc-300 border border-zinc-700"
+                        >
+                          {FEATURE_LABELS[f as keyof typeof FEATURE_LABELS] || f}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           ))}
@@ -334,6 +365,30 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
                     onChange={(e) => setGracePeriodDays(e.target.value)}
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white font-mono focus:border-amber-500 focus:outline-none"
                   />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 font-semibold mb-2 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Included Features
+                </label>
+                <div className="space-y-1.5">
+                  {FEATURE_KEYS.map((feature) => (
+                    <label
+                      key={feature}
+                      className="flex items-center gap-2.5 p-2 rounded-lg bg-zinc-800/50 border border-zinc-700/60 cursor-pointer hover:border-zinc-500 transition"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedFeatures.includes(feature)}
+                        onChange={() => toggleFeature(feature)}
+                        className="accent-amber-500 w-4 h-4 shrink-0"
+                      />
+                      <span className="text-zinc-200">{FEATURE_LABELS[feature]}</span>
+                      <span className="ml-auto text-[10px] font-mono text-zinc-500">{feature}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
 
