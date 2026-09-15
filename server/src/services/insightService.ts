@@ -34,6 +34,8 @@ export const INSIGHT_THRESHOLDS = {
   minReturningRateSample: 10,
   significantChangePct: 20,
   anomalyZScore: 2,
+  minAnomalyTotalOrders: 30,
+  minAnomalyNonZeroHours: 5,
 };
 
 function round2(n: number): number {
@@ -91,14 +93,31 @@ function stddev(values: number[]): number {
   return Math.sqrt(variance);
 }
 
-/** Hourly anomaly detection via transparent z-score rule (>2 std from mean). */
-function detectHourlyAnomalies(analytics: any, buckets: any[], metricKey: string) {
-  const values = buckets.map((b) => Number(b[metricKey]) || 0);
+/**
+ * Hourly anomaly detection via transparent z-score rule (>2 std from mean).
+ * Suppresses anomalies when the sample is too sparse to be reliable.
+ */
+function detectHourlyAnomalies(
+  analytics: any,
+  buckets: any[],
+  metricKey: string,
+  totalOrders: number,
+): { anomalies: Insight[]; insufficient: boolean } {
+  const list = buckets || [];
+  const nonZeroHours = list.filter((b) => (Number(b[metricKey]) || 0) > 0).length;
+  if (
+    totalOrders < INSIGHT_THRESHOLDS.minAnomalyTotalOrders ||
+    nonZeroHours < INSIGHT_THRESHOLDS.minAnomalyNonZeroHours
+  ) {
+    return { anomalies: [], insufficient: true };
+  }
+
+  const values = list.map((b) => Number(b[metricKey]) || 0);
   const m = mean(values);
   const sd = stddev(values);
   const out: Insight[] = [];
-  if (sd === 0) return out;
-  for (const b of buckets) {
+  if (sd === 0) return { anomalies: out, insufficient: false };
+  for (const b of list) {
     const v = Number(b[metricKey]) || 0;
     const z = (v - m) / sd;
     if (z > INSIGHT_THRESHOLDS.anomalyZScore) {
@@ -109,7 +128,7 @@ function detectHourlyAnomalies(analytics: any, buckets: any[], metricKey: string
         metric: metricKey,
         value: v,
         comparison: null,
-        sampleSize: buckets.length,
+        sampleSize: list.length,
         confidence: 'MEDIUM',
         supportingData: { hour: b.hour, value: v, mean: round2(m), stdDev: round2(sd), zScore: round2(z) },
         methodology: 'Anomaly flagged when a value exceeds 2 standard deviations from the period hourly mean (z-score rule).',
@@ -122,14 +141,14 @@ function detectHourlyAnomalies(analytics: any, buckets: any[], metricKey: string
         metric: metricKey,
         value: v,
         comparison: null,
-        sampleSize: buckets.length,
+        sampleSize: list.length,
         confidence: 'MEDIUM',
         supportingData: { hour: b.hour, value: v, mean: round2(m), stdDev: round2(sd), zScore: round2(z) },
         methodology: 'Anomaly flagged when a value falls below 2 standard deviations from the period hourly mean (z-score rule).',
       }, analytics));
     }
   }
-  return out;
+  return { anomalies: out, insufficient: false };
 }
 
 function trendInsight(analytics: any, current: number, previous: number, sampleSize: number, label: string, metricKey: string): Insight | null {
@@ -320,7 +339,11 @@ export class InsightService {
       }
     }
 
-    const anomalies = detectHourlyAnomalies(analytics, hourBuckets, 'revenue');
+    const anomalyResult = detectHourlyAnomalies(analytics, hourBuckets, 'revenue', s.orders || 0);
+    const anomalies = anomalyResult.anomalies;
+    if (anomalyResult.insufficient) {
+      insufficient.push('Insufficient data for reliable anomaly detection.');
+    }
     if (s.orders < INSIGHT_THRESHOLDS.minOrdersForTrend) {
       insufficient.push('Insufficient orders to compute reliable trends.');
     }
@@ -468,7 +491,11 @@ export class InsightService {
       }
     }
 
-    const anomalies = detectHourlyAnomalies(analytics, analytics?.timeAnalysis?.ordersByHour || [], 'orders');
+    const anomalyResult = detectHourlyAnomalies(analytics, analytics?.timeAnalysis?.ordersByHour || [], 'orders', k.totalOrders || 0);
+    const anomalies = anomalyResult.anomalies;
+    if (anomalyResult.insufficient) {
+      insufficient.push('Insufficient data for reliable anomaly detection.');
+    }
     if ((k.totalOrders || 0) < INSIGHT_THRESHOLDS.minOrdersForTrend) {
       insufficient.push('Insufficient orders to compute reliable platform trends.');
     }

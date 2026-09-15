@@ -55,16 +55,16 @@ function assertEvidence(items: any[]) {
 }
 
 async function runTests() {
-  console.log('🧪 AI Insights Regression Suite (15 Tests)...\n');
+  console.log('🧪 AI Insights Regression Suite (17 Tests)...\n');
   let passed = 0;
   let failed = 0;
   const assert = async (num: number, desc: string, fn: () => Promise<void> | void) => {
     try {
       await fn();
-      console.log(`  ✓ [${num}/15] ${desc}`);
+      console.log(`  ✓ [${num}/17] ${desc}`);
       passed++;
     } catch (err: any) {
-      console.error(`  ✗ [${num}/15] ${desc}:`, err.message || err);
+      console.error(`  ✗ [${num}/17] ${desc}:`, err.message || err);
       failed++;
     }
   };
@@ -108,11 +108,25 @@ async function runTests() {
 
     await assert(6, 'Anomaly detection via z-score', () => {
       const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, orders: 0, revenue: hour === 12 ? 1000 : 10 }));
-      const r = InsightService.generateRestaurantInsights(restaurantAnalytics({ salesByHour: hours }));
+      const r = InsightService.generateRestaurantInsights(restaurantAnalytics({ summary: { ...restaurantAnalytics().summary, orders: 100 }, salesByHour: hours }));
       if (!r.anomalies.some((a) => a.type === 'ANOMALY_HIGH' && a.supportingData.hour === 12)) throw new Error('spike anomaly not detected');
     });
 
-    await assert(7, 'Evidence attached to every insight', () => {
+    await assert(7, 'Sparse hourly data suppressed (insufficient total orders)', () => {
+      const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, orders: 0, revenue: hour === 12 ? 2 : 0 }));
+      const r = InsightService.generateRestaurantInsights(restaurantAnalytics({ summary: { ...restaurantAnalytics().summary, orders: 24 }, salesByHour: hours }));
+      if (r.anomalies.length > 0) throw new Error('sparse data should not produce anomalies');
+      if (!r.insufficientData.some((m) => m === 'Insufficient data for reliable anomaly detection.')) throw new Error('missing insufficient-data note');
+    });
+
+    await assert(8, 'Sparse hourly data suppressed (insufficient non-zero hours)', () => {
+      const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, orders: 0, revenue: hour === 3 ? 50 : hour === 20 ? 50 : 0 }));
+      const r = InsightService.generateRestaurantInsights(restaurantAnalytics({ summary: { ...restaurantAnalytics().summary, orders: 100 }, salesByHour: hours }));
+      if (r.anomalies.length > 0) throw new Error('sparse data should not produce anomalies');
+      if (!r.insufficientData.some((m) => m === 'Insufficient data for reliable anomaly detection.')) throw new Error('missing insufficient-data note');
+    });
+
+    await assert(9, 'Evidence attached to every insight', () => {
       const r = InsightService.generateRestaurantInsights(restaurantAnalytics({
         topFoods: [{ name: 'Burger', category: 'Mains', quantity: 10, revenue: 50 }],
         paymentBreakdown: [{ method: 'CASH', count: 10, amount: 100, share: 100 }],
@@ -121,7 +135,7 @@ async function runTests() {
       assertEvidence([...r.insights, ...r.recommendations, ...r.anomalies]);
     });
 
-    await assert(8, 'No fabricated values (value matches metric)', () => {
+    await assert(10, 'No fabricated values (value matches metric)', () => {
       const r = InsightService.generateRestaurantInsights(restaurantAnalytics({ topFoods: [{ name: 'Burger', category: 'Mains', quantity: 12, revenue: 50 }] }));
       const p = r.insights.find((i) => i.type === 'PRODUCT_SHARE');
       if (!p) throw new Error('missing product share');
@@ -146,37 +160,37 @@ async function runTests() {
     t2 = (await request(app).post('/api/auth/login').send({ email: `ins-o2-${unique}@test.com`, password: 'Password123!' })).body.data?.token;
     platformToken = (await request(app).post('/api/auth/login').send({ email: 'platformadmin@auramenu.com', password: 'Password123!' })).body.data?.token;
 
-    await assert(9, 'Feature gating: AI_INSIGHTS enabled → 200', async () => {
+    await assert(11, 'Feature gating: AI_INSIGHTS enabled → 200', async () => {
       const res = await request(app).get(`/api/restaurants/${r1.id}/ai-insights?period=month&date=2099-09`).set('Authorization', `Bearer ${t1}`);
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
     });
 
-    await assert(10, 'Feature gating: AI_INSIGHTS disabled → 403', async () => {
+    await assert(12, 'Feature gating: AI_INSIGHTS disabled → 403', async () => {
       const res = await request(app).get(`/api/restaurants/${r2.id}/ai-insights?period=month&date=2099-09`).set('Authorization', `Bearer ${t2}`);
       if (res.status !== 403 || res.body.errorCode !== 'FEATURE_NOT_AVAILABLE') throw new Error(`expected 403 FEATURE_NOT_AVAILABLE, got ${res.status} ${JSON.stringify(res.body)}`);
     });
 
-    await assert(11, 'Tenant isolation for insights', async () => {
+    await assert(13, 'Tenant isolation for insights', async () => {
       const res = await request(app).get(`/api/restaurants/${r2.id}/ai-insights?period=month&date=2099-09`).set('Authorization', `Bearer ${t1}`);
       if (res.status !== 403) throw new Error(`expected 403, got ${res.status}`);
     });
 
-    await assert(12, 'Platform aggregation access (PLATFORM_ADMIN)', async () => {
+    await assert(14, 'Platform aggregation access (PLATFORM_ADMIN)', async () => {
       const res = await request(app).get(`/api/platform/ai-insights?period=month&date=2099-09`).set('Authorization', `Bearer ${platformToken}`);
       if (res.status !== 200) throw new Error(`expected 200, got ${res.status}`);
     });
 
-    await assert(13, 'Restaurant admin blocked from platform insights', async () => {
+    await assert(15, 'Restaurant admin blocked from platform insights', async () => {
       const res = await request(app).get(`/api/platform/ai-insights?period=month&date=2099-09`).set('Authorization', `Bearer ${t1}`);
       if (res.status !== 403) throw new Error(`expected 403, got ${res.status}`);
     });
 
-    await assert(14, 'CSV export of insights', async () => {
+    await assert(16, 'CSV export of insights', async () => {
       const res = await request(app).get(`/api/restaurants/${r1.id}/ai-insights/export?period=month&date=2099-09&format=csv`).set('Authorization', `Bearer ${t1}`);
       if (res.status !== 200 || !res.text.startsWith('\uFEFF')) throw new Error('csv invalid');
     });
 
-    await assert(15, 'XLSX export of insights', async () => {
+    await assert(17, 'XLSX export of insights', async () => {
       const res = await request(app).get(`/api/restaurants/${r1.id}/ai-insights/export?period=month&date=2099-09&format=xlsx`).set('Authorization', `Bearer ${t1}`).buffer(true).parse((res: any, cb: any) => {
         const chunks: Buffer[] = [];
         res.on('data', (c: Buffer) => chunks.push(c));
