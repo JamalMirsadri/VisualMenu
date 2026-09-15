@@ -1,12 +1,29 @@
 import { apiClient } from './apiClient';
 import { buildApiUrl, getAuthToken } from '../config';
 
+export type QrElementType = 'QR_CODE' | 'LOGO' | 'RESTAURANT_NAME' | 'TABLE_NAME' | 'TABLE_NUMBER';
+
+export interface QrPrintElement {
+  id: string;
+  type: QrElementType;
+  x: number; // mm from left
+  y: number; // mm from top
+  w: number; // mm width
+  h: number; // mm height
+  fontSize?: number; // pt (text only)
+  fontFamily?: string;
+  fontWeight?: number;
+  color?: string;
+  textAlign?: 'left' | 'center' | 'right';
+}
+
 export interface QrPrintTemplate {
   id: string;
   name: string;
   description?: string | null;
   backgroundUrl?: string | null;
-  layout: 'A4' | 'CARD';
+  layout: 'A4' | 'CARD' | 'A5';
+  layoutConfig?: QrPrintElement[] | null;
   active: boolean;
   createdAt: string;
   updatedAt: string;

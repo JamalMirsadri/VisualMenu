@@ -1,14 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { qrTemplateService, type QrPrintTemplate } from '../../services/qrTemplateService';
+import { qrTemplateService, type QrPrintTemplate, type QrPrintElement } from '../../services/qrTemplateService';
+import { QrTemplateEditor } from '../../components/platform/QrTemplateEditor';
 import {
   Plus,
   Pencil,
   Trash2,
   Power,
-  Upload,
-  ImageIcon,
   RefreshCw,
+  ImageIcon,
   Layers,
   CheckCircle2,
   XCircle,
@@ -20,16 +20,8 @@ export const PlatformQrTemplatesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
-
-  const [modalOpen, setModalOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<QrPrintTemplate | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [layout, setLayout] = useState<'A4' | 'CARD'>('CARD');
-  const [backgroundUrl, setBackgroundUrl] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -49,42 +41,29 @@ export const PlatformQrTemplatesPage: React.FC = () => {
 
   const openCreate = () => {
     setEditing(null);
-    setName('');
-    setDescription('');
-    setLayout('CARD');
-    setBackgroundUrl('');
-    setModalOpen(true);
+    setEditorOpen(true);
   };
 
   const openEdit = (t: QrPrintTemplate) => {
     setEditing(t);
-    setName(t.name);
-    setDescription(t.description || '');
-    setLayout(t.layout);
-    setBackgroundUrl(t.backgroundUrl || '');
-    setModalOpen(true);
+    setEditorOpen(true);
   };
 
-  const handleSave = async () => {
-    if (!name.trim()) {
-      alert('Template name is required.');
-      return;
+  const handleEditorSave = async (data: {
+    name: string;
+    description?: string;
+    layout: 'A5';
+    backgroundUrl?: string;
+    layoutConfig: QrPrintElement[];
+  }) => {
+    if (editing) {
+      await qrTemplateService.update(editing.id, data);
+    } else {
+      await qrTemplateService.create(data);
     }
-    try {
-      setSaving(true);
-      const payload = { name, description, layout, backgroundUrl: backgroundUrl || undefined };
-      if (editing) {
-        await qrTemplateService.update(editing.id, payload);
-      } else {
-        await qrTemplateService.create(payload);
-      }
-      setModalOpen(false);
-      await load();
-    } catch (err: any) {
-      alert(err.message || 'Save failed.');
-    } finally {
-      setSaving(false);
-    }
+    setEditorOpen(false);
+    setEditing(null);
+    await load();
   };
 
   const handleToggle = async (t: QrPrintTemplate) => {
@@ -109,20 +88,6 @@ export const PlatformQrTemplatesPage: React.FC = () => {
       alert(err.message || 'Delete failed.');
     } finally {
       setActionId(null);
-    }
-  };
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      setUploading(true);
-      const result = await qrTemplateService.uploadBackground(file);
-      setBackgroundUrl(result.url);
-    } catch (err: any) {
-      alert(err.message || 'Upload failed.');
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -242,95 +207,15 @@ export const PlatformQrTemplatesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Create / Edit modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl bg-zinc-900 border border-zinc-800 p-6 space-y-5 shadow-2xl">
-            <h3 className="font-serif-luxury text-lg font-bold text-white">
-              {editing ? 'Edit Template' : 'New Template'}
-            </h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs uppercase text-zinc-400 font-semibold mb-1.5">Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-400"
-                  placeholder="e.g. Luxury Dark"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs uppercase text-zinc-400 font-semibold mb-1.5">Description</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-sm text-white focus:outline-none focus:border-amber-400 resize-none"
-                  rows={2}
-                  placeholder="Optional description"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs uppercase text-zinc-400 font-semibold mb-1.5">Layout</label>
-                <div className="flex items-center gap-2">
-                  {(['CARD', 'A4'] as const).map((l) => (
-                    <button
-                      key={l}
-                      type="button"
-                      onClick={() => setLayout(l)}
-                      className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${
-                        layout === l
-                          ? 'bg-amber-500 text-black border-amber-400'
-                          : 'bg-zinc-950 text-zinc-300 border-zinc-800 hover:border-zinc-600'
-                      }`}
-                    >
-                      {l === 'A4' ? 'A4 Sheet' : 'Card Size'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs uppercase text-zinc-400 font-semibold mb-1.5">
-                  Background / Design
-                </label>
-                {backgroundUrl && (
-                  <img
-                    src={backgroundUrl}
-                    alt="Background preview"
-                    className="w-full h-32 object-cover rounded-xl border border-zinc-800 mb-2"
-                  />
-                )}
-                <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-amber-400/50 text-zinc-300 text-xs font-semibold cursor-pointer">
-                  <Upload className="w-4 h-4" />
-                  <span>{uploading ? 'Uploading...' : 'Upload Image'}</span>
-                  <input type="file" accept="image/*" className="hidden" onChange={handleUpload} disabled={uploading} />
-                </label>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                onClick={() => setModalOpen(false)}
-                disabled={saving}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving || !name.trim()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-semibold text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50"
-              >
-                {saving && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                <span>{editing ? 'Save Changes' : 'Create Template'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {editorOpen && (
+        <QrTemplateEditor
+          initial={editing}
+          onSave={handleEditorSave}
+          onCancel={() => {
+            setEditorOpen(false);
+            setEditing(null);
+          }}
+        />
       )}
     </div>
   );

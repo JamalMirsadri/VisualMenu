@@ -14,7 +14,9 @@ const upload = multer({
 });
 
 function normalizeLayout(layout?: string): QrPrintLayout {
-  return layout === 'A4' ? QrPrintLayout.A4 : QrPrintLayout.CARD;
+  if (layout === 'A4') return QrPrintLayout.A4;
+  if (layout === 'A5') return QrPrintLayout.A5;
+  return QrPrintLayout.CARD;
 }
 
 // -----------------------------------------------------------------------------
@@ -36,7 +38,7 @@ qrTemplateRouter.get('/qr-templates', async (_req: Request, res: Response, next:
 // POST /api/platform/qr-templates
 qrTemplateRouter.post('/qr-templates', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { name, description, layout, backgroundUrl } = req.body || {};
+    const { name, description, layout, backgroundUrl, layoutConfig } = req.body || {};
     if (!name || !String(name).trim()) {
       res.status(400).json({ success: false, errorCode: 'VALIDATION_ERROR', message: 'Template name is required.' });
       return;
@@ -48,6 +50,7 @@ qrTemplateRouter.post('/qr-templates', async (req: Request, res: Response, next:
         description: description ? String(description).trim() : null,
         backgroundUrl: backgroundUrl ? String(backgroundUrl).trim() : null,
         layout: normalizeLayout(layout),
+        layoutConfig: layoutConfig ?? undefined,
         active: true,
         createdById: req.user?.id || null,
       },
@@ -118,12 +121,13 @@ qrTemplateRouter.patch(
         return;
       }
 
-      const { name, description, layout, backgroundUrl } = req.body || {};
+      const { name, description, layout, backgroundUrl, layoutConfig } = req.body || {};
       const data: any = {};
       if (name !== undefined) data.name = String(name).trim();
       if (description !== undefined) data.description = description ? String(description).trim() : null;
       if (layout !== undefined) data.layout = normalizeLayout(layout);
       if (backgroundUrl !== undefined) data.backgroundUrl = backgroundUrl ? String(backgroundUrl).trim() : null;
+      if (layoutConfig !== undefined) data.layoutConfig = layoutConfig;
 
       const updated = await prisma.qrPrintTemplate.update({ where: { id }, data });
       res.json({ success: true, data: updated });

@@ -937,6 +937,7 @@ model PlatformSettings {
 enum QrPrintLayout {
   A4
   CARD
+  A5
 }
 
 model QrPrintTemplate {
@@ -945,6 +946,7 @@ model QrPrintTemplate {
   description   String?       @db.Text
   backgroundUrl String?       @map("background_url")
   layout        QrPrintLayout @default(CARD)
+  layoutConfig  Json?         @map("layout_config")
   active        Boolean       @default(true)
   createdById   String?       @map("created_by_id") @db.Uuid
   createdAt     DateTime      @default(now()) @map("created_at")
