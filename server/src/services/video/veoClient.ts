@@ -1,3 +1,7 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { randomUUID } from 'crypto';
 import { GoogleGenAI } from '@google/genai';
 
 /**
@@ -77,22 +81,34 @@ export class GoogleGenAiVeoClient implements VeoClient {
   }
 
   async downloadVideo(operation: VeoOperation): Promise<VeoDownloadResult> {
-    const video = operation.generatedVideos?.[0];
-    const mimeType = video?.mimeType || 'video/mp4';
+    const sdkVideo = (operation._raw as any)?.response?.generatedVideos?.[0]?.video;
 
-    if (video?.videoBytes) {
-      return { bytes: Buffer.from(video.videoBytes, 'base64'), mimeType };
-    }
-
-    if (video?.uri) {
-      const resp = await fetch(video.uri);
-      if (!resp.ok) {
-        throw new Error(`Failed to download generated video (HTTP ${resp.status}).`);
+    if (!sdkVideo) {
+      // Fallback for operations that already carry inline base64 bytes.
+      const inline = operation.generatedVideos?.[0];
+      if (inline?.videoBytes) {
+        return { bytes: Buffer.from(inline.videoBytes, 'base64'), mimeType: inline.mimeType || 'video/mp4' };
       }
-      return { bytes: Buffer.from(await resp.arrayBuffer()), mimeType };
+      throw new Error('Generated video did not contain a downloadable video.');
     }
 
-    throw new Error('Generated video did not contain downloadable bytes or a URI.');
+    const mimeType = sdkVideo?.mimeType || 'video/mp4';
+    const downloadPath = path.join(os.tmpdir(), `veo-${randomUUID()}.mp4`);
+
+    console.log('[VEO] download request started');
+
+    try {
+      await this.client.files.download({ file: sdkVideo, downloadPath });
+      const bytes = await fs.promises.readFile(downloadPath);
+      console.log('[VEO] download completed');
+      return { bytes, mimeType };
+    } catch (err: any) {
+      const status = err?.status ?? err?.statusCode ?? 'unknown';
+      console.error(`[VEO] download failed status=${status} message=${err?.message ?? 'download failed'}`);
+      throw err;
+    } finally {
+      await fs.promises.rm(downloadPath, { force: true }).catch(() => {});
+    }
   }
 
   private wrap(op: any): VeoOperation {
