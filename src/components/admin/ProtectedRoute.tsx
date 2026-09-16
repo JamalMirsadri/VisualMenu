@@ -14,6 +14,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
   const { isAuthenticated, loading, subscriptionLoading, role, isPlatformAdmin, isPlatformUser, subscriptionStatus, activeRestaurant } = useAuth();
   const location = useLocation();
 
+  // Staff members are never subject to subscription gating; their access is
+  // controlled exclusively by restaurant assignment, role, and permissions.
+  const isStaff = role === 'STAFF';
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen w-full bg-zinc-950 text-zinc-300">
@@ -31,7 +35,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
 
   // Wait for the active restaurant's subscription to resolve before gating,
   // otherwise a still-loading subscription (null status) would falsely redirect.
-  if (!isPlatformAdmin && !isPlatformUser && subscriptionLoading) {
+  if (!isPlatformAdmin && !isPlatformUser && !isStaff && subscriptionLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen w-full bg-zinc-950 text-zinc-300">
         <div className="w-10 h-10 rounded-full border-2 border-amber-400/20 border-t-amber-400 animate-spin mb-4" />
@@ -45,7 +49,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowe
   // Subscription Gating (Platform operators always bypass; only relevant when a
   // restaurant membership exists — otherwise the admin pages surface their own
   // "no restaurant assigned" error state instead of a misleading 402 redirect).
-  if (activeRestaurant && !isPlatformAdmin && !isPlatformUser && !allowExpired) {
+  if (activeRestaurant && !isPlatformAdmin && !isPlatformUser && !isStaff && !allowExpired) {
     const isInactiveSub =
       subscriptionStatus === 'EXPIRED' ||
       subscriptionStatus === 'SUSPENDED' ||

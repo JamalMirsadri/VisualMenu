@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { SubscriptionStatus } from '@prisma/client';
+import { Role, SubscriptionStatus } from '@prisma/client';
 import { prisma } from '../prisma';
 import { resolveRestaurantId } from './authMiddleware';
 
@@ -76,8 +76,17 @@ export function requireActiveSubscription() {
             restaurantId,
           },
         },
+        select: { role: true },
       });
       if (!userMembership) {
+        next();
+        return;
+      }
+
+      // Staff access is governed by restaurant assignment + role + individual
+      // permissions, never by the restaurant's subscription state. Subscription
+      // gating remains in force for OWNER/ADMIN/MANAGER memberships.
+      if (userMembership.role === Role.STAFF) {
         next();
         return;
       }
