@@ -9,6 +9,9 @@ import { SubscriptionScheduler } from './services/subscription/subscriptionSched
 // Fail fast if JWT_SECRET is missing (no insecure fallback).
 getJwtSecret();
 
+// Log the selected AI video generation provider at startup.
+console.log(`[VideoGeneration] provider: ${process.env.VIDEO_GENERATION_PROVIDER || 'MOCK'}`);
+
 const PORT = process.env.PORT || 3001;
 
 const server = app.listen(PORT, () => {

@@ -118,6 +118,8 @@ export class VideoGenerationService {
       },
     });
 
+    console.log(`[VideoGeneration] job created: ${job.id}`);
+
     // Dispatch provider submission asynchronously; never block the HTTP request.
     setImmediate(() => {
       this.dispatchToProvider(job.id).catch((err) => {
@@ -131,6 +133,8 @@ export class VideoGenerationService {
   private static async dispatchToProvider(jobId: string): Promise<void> {
     const job = await prisma.videoGenerationJob.findUnique({ where: { id: jobId } });
     if (!job || job.status !== VideoJobStatus.QUEUED) return;
+
+    console.log(`[VideoGeneration] dispatch started: ${jobId}`);
 
     const meta = (job.metadata || {}) as any;
     const [template, restaurant, sourceMedia] = await Promise.all([
@@ -154,6 +158,9 @@ export class VideoGenerationService {
 
     try {
       const provider = getVideoGenerationProvider();
+      console.log(`[VideoGeneration] provider: ${provider.name}`);
+      console.log(`[VideoGeneration] submitting to provider: ${jobId}`);
+
       const result = await provider.submit({
         jobId: job.id,
         restaurantId: job.restaurantId,
@@ -176,6 +183,8 @@ export class VideoGenerationService {
         motionConfig: template?.motionConfig,
       });
 
+      console.log(`[VideoGeneration] provider submission completed: ${jobId}, providerJobId=${result.providerJobId}`);
+
       await prisma.videoGenerationJob.update({
         where: { id: job.id },
         data: { providerJobId: result.providerJobId },
@@ -194,6 +203,7 @@ export class VideoGenerationService {
       }
     } catch (err: any) {
       if (err?.errorCode === 'VIDEO_CANCELLED') return;
+      console.error(`[VideoGeneration] FAILED: ${jobId}, error=${err?.message ?? 'unknown error'}, stack=${err?.stack ?? ''}`);
       await this.failGeneration(job.id, err.message || 'Provider submission failed.');
     }
   }
@@ -204,6 +214,8 @@ export class VideoGenerationService {
     providerJobId: string,
   ): Promise<{ buffer: Buffer; mimeType: string; filename: string }> {
     const deadline = Date.now() + getVeoTimeoutMs();
+
+    console.log(`[VideoGeneration] polling started: ${jobId}`);
 
     while (Date.now() < deadline) {
       const job = await prisma.videoGenerationJob.findUnique({ where: { id: jobId } });
@@ -217,8 +229,13 @@ export class VideoGenerationService {
 
       const pollResult = await this.pollWithRetry(provider, providerJobId);
 
+      console.log(`[VideoGeneration] poll result: ${jobId}, status=${pollResult.status}`);
+
       if (pollResult.status === 'COMPLETED') {
-        return provider.download!(providerJobId);
+        console.log(`[VideoGeneration] download started: ${jobId}`);
+        const download = await provider.download!(providerJobId);
+        console.log(`[VideoGeneration] download completed: ${jobId}`);
+        return download;
       }
       if (pollResult.status === 'FAILED') {
         throw new VideoGenerationError(pollResult.error || 'Provider operation failed.', 'PROVIDER_FAILED');
@@ -280,6 +297,7 @@ export class VideoGenerationService {
         },
       });
     } catch (err: any) {
+      console.error(`[VideoGeneration] FAILED: ${job.id}, error=${err?.message ?? 'unknown error'}, stack=${err?.stack ?? ''}`);
       await this.failGeneration(job.id, `Output storage failed: ${err.message || 'unknown error'}`);
       throw err;
     }
@@ -321,6 +339,7 @@ export class VideoGenerationService {
         },
       });
     } catch (err: any) {
+      console.error(`[VideoGeneration] FAILED: ${job.id}, error=${err?.message ?? 'unknown error'}, stack=${err?.stack ?? ''}`);
       await this.failGeneration(job.id, `Output storage failed: ${err.message || 'unknown error'}`);
       throw err;
     }

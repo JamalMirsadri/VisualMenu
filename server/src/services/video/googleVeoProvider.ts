@@ -67,6 +67,8 @@ export class GoogleVeoProvider implements VideoGenerationProvider {
 
     const image = await resolveImageBytes(request.imageUrl);
 
+    console.log(`[VEO] generateVideos request started: ${request.jobId}, model=${model}`);
+
     const operation = await this.client.generateVideos({
       model,
       prompt: request.prompt || request.promptTemplate || '',
@@ -78,11 +80,15 @@ export class GoogleVeoProvider implements VideoGenerationProvider {
       },
     });
 
+    console.log(`[VEO] generateVideos response received: ${request.jobId}, operation=${operation.name}`);
+
     this.operations.set(operation.name, operation);
     return { providerJobId: operation.name };
   }
 
   async poll(providerJobId: string): Promise<VideoPollResult> {
+    console.log(`[VEO] polling operation: ${providerJobId}`);
+
     const operation = this.operations.get(providerJobId);
     if (!operation) {
       return { status: 'FAILED', error: 'Provider operation not found.' };
@@ -90,6 +96,8 @@ export class GoogleVeoProvider implements VideoGenerationProvider {
 
     const updated = await this.client.getVideosOperation(operation);
     this.operations.set(providerJobId, updated);
+
+    console.log(`[VEO] operation status: ${providerJobId}, done=${updated.done}`);
 
     if (updated.done) {
       if (updated.error) {
