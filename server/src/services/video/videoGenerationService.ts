@@ -3,7 +3,8 @@ import { MediaType, VideoJobStatus } from '@prisma/client';
 import { prisma } from '../../prisma';
 import { MediaService } from '../mediaService';
 import { VideoCreditService } from './videoCreditService';
-import { getVideoGenerationProvider } from './videoGenerationProvider';
+import { getVideoGenerationProvider, type VideoGenerationProvider, type VideoPollResult } from './videoGenerationProvider';
+import { getVeoPollIntervalMs, getVeoTimeoutMs } from './videoConfig';
 
 export interface StartGenerationInput {
   templateId: string;
@@ -23,6 +24,25 @@ export interface CompleteGenerationOutput {
   height?: number;
   posterUrl?: string;
   thumbnailUrl?: string;
+}
+
+export interface StoredGenerationOutput {
+  buffer: Buffer;
+  mimeType?: string;
+  filename?: string;
+  duration?: string;
+}
+
+function buildPrompt(template: string, vars: Record<string, string>): string {
+  let out = template || '';
+  for (const [key, value] of Object.entries(vars)) {
+    out = out.split(`{${key}}`).join(value || '');
+  }
+  return out.trim();
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export class VideoGenerationError extends Error {
@@ -113,13 +133,23 @@ export class VideoGenerationService {
     if (!job || job.status !== VideoJobStatus.QUEUED) return;
 
     const meta = (job.metadata || {}) as any;
-    const template = job.templateId
-      ? await prisma.videoTemplate.findUnique({ where: { id: job.templateId } })
-      : null;
+    const [template, restaurant, sourceMedia] = await Promise.all([
+      job.templateId ? prisma.videoTemplate.findUnique({ where: { id: job.templateId } }) : null,
+      prisma.restaurant.findUnique({ where: { id: job.restaurantId }, select: { id: true, name: true, logo: true } }),
+      job.sourceMediaId ? prisma.media.findUnique({ where: { id: job.sourceMediaId }, select: { url: true, mimeType: true } }) : null,
+    ]);
 
     await prisma.videoGenerationJob.update({
       where: { id: job.id },
       data: { status: VideoJobStatus.PROCESSING, startedAt: new Date() },
+    });
+
+    const prompt = buildPrompt(meta.promptTemplate || '', {
+      FOOD_IMAGE: 'the provided food image',
+      FOOD_NAME: meta.productName || 'the dish',
+      CATEGORY: (meta.contentType || '').toLowerCase(),
+      RESTAURANT_NAME: restaurant?.name || '',
+      LOGO: 'the restaurant logo',
     });
 
     try {
@@ -129,11 +159,14 @@ export class VideoGenerationService {
         restaurantId: job.restaurantId,
         contentType: meta.contentType || 'OTHER',
         promptTemplate: meta.promptTemplate || '',
+        prompt,
         negativePrompt: meta.negativePrompt,
-        imageUrl: null,
+        imageUrl: sourceMedia?.url || null,
+        imageMimeType: sourceMedia?.mimeType || null,
         productName: meta.productName,
-        restaurantName: null,
-        logoUrl: null,
+        restaurantName: restaurant?.name || null,
+        logoUrl: restaurant?.logo || null,
+        model: template?.model,
         aspectRatio: template?.aspectRatio,
         duration: template?.duration,
         backgroundAsset: template?.backgroundAsset,
@@ -147,9 +180,65 @@ export class VideoGenerationService {
         where: { id: job.id },
         data: { providerJobId: result.providerJobId },
       });
+
+      if (typeof provider.poll === 'function' && typeof provider.download === 'function') {
+        const download = await this.pollForCompletion(provider, job.id, result.providerJobId);
+        const current = await prisma.videoGenerationJob.findUnique({ where: { id: job.id } });
+        if (!current || current.status === VideoJobStatus.CANCELLED) return;
+        await this.storeGeneratedVideo(job.id, {
+          buffer: download.buffer,
+          mimeType: download.mimeType,
+          filename: download.filename,
+          duration: template?.duration ? String(template.duration) : undefined,
+        });
+      }
     } catch (err: any) {
+      if (err?.errorCode === 'VIDEO_CANCELLED') return;
       await this.failGeneration(job.id, err.message || 'Provider submission failed.');
     }
+  }
+
+  private static async pollForCompletion(
+    provider: VideoGenerationProvider,
+    jobId: string,
+    providerJobId: string,
+  ): Promise<{ buffer: Buffer; mimeType: string; filename: string }> {
+    const deadline = Date.now() + getVeoTimeoutMs();
+
+    while (Date.now() < deadline) {
+      const job = await prisma.videoGenerationJob.findUnique({ where: { id: jobId } });
+      if (!job || job.status === VideoJobStatus.CANCELLED) {
+        const err: any = new Error('Generation cancelled.');
+        err.errorCode = 'VIDEO_CANCELLED';
+        throw err;
+      }
+
+      await sleep(getVeoPollIntervalMs());
+
+      const pollResult = await this.pollWithRetry(provider, providerJobId);
+
+      if (pollResult.status === 'COMPLETED') {
+        return provider.download!(providerJobId);
+      }
+      if (pollResult.status === 'FAILED') {
+        throw new VideoGenerationError(pollResult.error || 'Provider operation failed.', 'PROVIDER_FAILED');
+      }
+    }
+
+    throw new VideoGenerationError('Video generation timed out.', 'VIDEO_TIMEOUT');
+  }
+
+  private static async pollWithRetry(provider: VideoGenerationProvider, providerJobId: string, maxRetries = 3): Promise<VideoPollResult> {
+    let lastError: any;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await provider.poll!(providerJobId);
+      } catch (err) {
+        lastError = err;
+        await sleep(getVeoPollIntervalMs());
+      }
+    }
+    throw new VideoGenerationError(`Provider polling failed: ${lastError?.message || 'unknown error'}`, 'PROVIDER_POLL_FAILED');
   }
 
   /**
@@ -196,11 +285,52 @@ export class VideoGenerationService {
     }
   }
 
-  /** Marks a job failed and releases its reserved credit. */
+  /** Uploads a generated MP4 buffer through the existing Media Library. */
+  static async storeGeneratedVideo(jobId: string, output: StoredGenerationOutput) {
+    const job = await prisma.videoGenerationJob.findUnique({ where: { id: jobId } });
+    if (!job) {
+      throw new VideoGenerationError('Generation job not found.', 'JOB_NOT_FOUND', 404);
+    }
+    if (job.status === VideoJobStatus.COMPLETED) return job;
+    if (job.status === VideoJobStatus.CANCELLED) return job;
+
+    const meta = (job.metadata || {}) as any;
+
+    try {
+      const media = await MediaService.uploadAndCreateMedia(
+        job.restaurantId,
+        {
+          buffer: output.buffer,
+          originalname: output.filename || 'generated.mp4',
+          mimetype: output.mimeType || 'video/mp4',
+        },
+        {
+          foodItemId: meta.foodItemId || null,
+          duration: output.duration,
+          sourceType: 'AI_VIDEO',
+        }
+      );
+
+      return await prisma.videoGenerationJob.update({
+        where: { id: job.id },
+        data: {
+          status: VideoJobStatus.COMPLETED,
+          outputMediaId: media.id,
+          completedAt: new Date(),
+          error: null,
+        },
+      });
+    } catch (err: any) {
+      await this.failGeneration(job.id, `Output storage failed: ${err.message || 'unknown error'}`);
+      throw err;
+    }
+  }
+
+  /** Marks a job failed and releases its reserved credit (exactly once). */
   static async failGeneration(jobId: string, error: string) {
     const job = await prisma.videoGenerationJob.findUnique({ where: { id: jobId } });
     if (!job) return null;
-    if (job.status === VideoJobStatus.COMPLETED) return job;
+    if (job.status === VideoJobStatus.COMPLETED || job.status === VideoJobStatus.CANCELLED) return job;
 
     await prisma.videoGenerationJob.update({
       where: { id: job.id },

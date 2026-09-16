@@ -90,6 +90,7 @@ export class MediaService {
       duration?: string;
       desktopUrl?: string;
       mobileUrl?: string;
+      sourceType?: string;
     }
   ) {
     // 1. Strict validation
@@ -129,7 +130,7 @@ export class MediaService {
       posterUrl: extra?.posterUrl,
       desktopUrl: extra?.desktopUrl,
       mobileUrl: extra?.mobileUrl,
-      sourceType: 'UPLOAD',
+      sourceType: extra?.sourceType || 'UPLOAD',
     });
   }
 

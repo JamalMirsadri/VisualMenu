@@ -45,6 +45,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.22.0",
     "@prisma/client": "^6.19.3",
     "@types/multer": "^2.2.0",
     "bcryptjs": "^3.0.3",

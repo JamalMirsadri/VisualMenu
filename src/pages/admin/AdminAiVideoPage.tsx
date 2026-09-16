@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { aiVideoService, type VideoCreditBalance, type VideoGenerationJob } from '../../services/aiVideoService';
 import { mediaService } from '../../services/mediaService';
+import { resolveMediaUrl } from '../../config';
 import type { VideoTemplate, VideoContentType } from '../../services/videoTemplateService';
 
 const CONTENT_TYPES: VideoContentType[] = ['FOOD', 'SALAD', 'DRINK', 'DESSERT', 'OTHER'];
@@ -267,23 +268,36 @@ export const AdminAiVideoPage: React.FC = () => {
         ) : (
           <div className="space-y-2">
             {jobs.map((job) => (
-              <div key={job.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusStyle[job.status]}`}>{job.status}</span>
-                    {job.template && <span className="text-[11px] text-zinc-400">{job.template.name}</span>}
+              <div key={job.id} className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusStyle[job.status]}`}>{job.status}</span>
+                      {job.template && <span className="text-[11px] text-zinc-400">{job.template.name}</span>}
+                      {(job.status === 'QUEUED' || job.status === 'PROCESSING') && <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />}
+                    </div>
+                    <div className="text-[11px] text-zinc-500 mt-1 truncate">
+                      {(job.metadata as any)?.productName || 'Unnamed'} · {new Date(job.createdAt).toLocaleString()}
+                    </div>
+                    {job.status === 'PROCESSING' && <div className="text-[11px] text-amber-400/80 mt-1">Generating video with the AI provider…</div>}
+                    {job.error && <div className="text-[11px] text-red-400 mt-1">Failed: {job.error}</div>}
                   </div>
-                  <div className="text-[11px] text-zinc-500 mt-1 truncate">
-                    {(job.metadata as any)?.productName || 'Unnamed'} · {new Date(job.createdAt).toLocaleString()}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {job.outputMedia && <span className="text-emerald-400" title="Output saved to Media Library"><CheckCircle2 className="w-4 h-4" /></span>}
+                    {(job.status === 'QUEUED' || job.status === 'PROCESSING') && (
+                      <button onClick={() => handleCancel(job.id)} className="text-zinc-500 hover:text-red-400" title="Cancel"><XCircle className="w-4 h-4" /></button>
+                    )}
                   </div>
-                  {job.error && <div className="text-[11px] text-red-400 mt-1">{job.error}</div>}
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {job.outputMedia && <span className="text-emerald-400" title="Output saved to Media Library"><CheckCircle2 className="w-4 h-4" /></span>}
-                  {(job.status === 'QUEUED' || job.status === 'PROCESSING') && (
-                    <button onClick={() => handleCancel(job.id)} className="text-zinc-500 hover:text-red-400" title="Cancel"><XCircle className="w-4 h-4" /></button>
-                  )}
-                </div>
+
+                {job.status === 'COMPLETED' && job.outputMedia && (
+                  <video
+                    controls
+                    src={resolveMediaUrl((job.outputMedia as any)?.url)}
+                    poster={(job.outputMedia as any)?.posterUrl ? resolveMediaUrl((job.outputMedia as any).posterUrl) : undefined}
+                    className="mt-3 w-full max-w-sm aspect-video rounded-lg bg-black object-cover"
+                  />
+                )}
               </div>
             ))}
           </div>
