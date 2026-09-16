@@ -27,7 +27,7 @@ const statusStyle: Record<string, string> = {
 };
 
 export const AdminAiVideoPage: React.FC = () => {
-  const { activeRestaurant } = useAuth();
+  const { activeRestaurant, hasFeature } = useAuth();
   const restaurantId = activeRestaurant?.id;
 
   const [balance, setBalance] = useState<VideoCreditBalance | null>(null);
@@ -93,6 +93,43 @@ export const AdminAiVideoPage: React.FC = () => {
   );
 
   const noCredits = balance !== null && balance.balance <= 0;
+
+  const selectedPromptVariant = useMemo(
+    () => selectedTemplate?.variants?.find((v) => v.id === variantId),
+    [selectedTemplate, variantId]
+  );
+
+  const remainingCredits = balance?.balance ?? 0;
+  const hasFeatureAiVideo = hasFeature('AI_FOOD_VIDEO');
+  const productNameValid = productName.trim().length > 0;
+  const foodImageAttached = Boolean(sourceMediaId);
+
+  const disabledReason = !hasFeatureAiVideo
+    ? 'AI_FOOD_VIDEO entitlement required'
+    : !selectedTemplate
+      ? 'No template selected'
+      : !selectedPromptVariant
+        ? 'No prompt variant selected'
+        : !productNameValid
+          ? 'Product name required'
+          : !foodImageAttached
+            ? 'Food image required'
+            : remainingCredits <= 0
+              ? 'No video credits remaining'
+              : null;
+
+  const canGenerate = !generating && disabledReason === null;
+
+  // Temporary diagnostic logging for the Generate Video button gating.
+  console.log({
+    selectedTemplate,
+    selectedPromptVariant,
+    productName,
+    foodImage: sourceMediaId,
+    remainingCredits,
+    hasFeature: hasFeatureAiVideo,
+    disabledReason,
+  });
 
   const handleContentTypeChange = (ct: VideoContentType) => {
     setContentType(ct);
@@ -250,7 +287,7 @@ export const AdminAiVideoPage: React.FC = () => {
 
         <button
           onClick={handleGenerate}
-          disabled={generating || !templateId || !variantId || noCredits}
+          disabled={!canGenerate}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
