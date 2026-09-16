@@ -27,201 +27,160 @@ export interface CreateStaffData {
   password?: string;
 }
 
+export interface StaffInvitationResult {
+  id: string;
+  rawToken: string;
+  expiresAt: string;
+  onboardingUrl: string;
+}
+
 export const staffService = {
   /**
-   * Retrieves the permission catalog and role templates
+   * Retrieves the permission catalog and role templates.
+   * `apiClient` already unwraps the top-level `data` envelope.
    */
   async getPermissionsCatalog(restaurantId: string): Promise<CatalogResponse> {
-    const res = await apiClient.get<{ success: boolean; data: CatalogResponse }>(
+    return await apiClient.get<CatalogResponse>(
       `/restaurants/${restaurantId}/staff-permissions-catalog`
     );
-    return res.data;
   },
 
   /**
-   * Lists all staff and pending invitations for a restaurant
+   * Lists all staff and pending invitations for a restaurant.
+   * Backend returns `data: { members, invitations }`.
    */
   async listStaff(restaurantId: string): Promise<ListStaffResponse> {
     const res = await apiClient.get<{
-      success: boolean;
-      data: StaffMember[];
+      members: StaffMember[];
       invitations: StaffInvitationItem[];
     }>(`/restaurants/${restaurantId}/staff`);
 
     return {
-      data: res.data || [],
+      data: res.members || [],
       invitations: res.invitations || [],
     };
   },
 
   /**
-   * Retrieves details and explicit permissions for a staff member
+   * Retrieves details and explicit permissions for a staff member.
    */
   async getStaffDetails(restaurantId: string, userId: string): Promise<StaffMember> {
-    const res = await apiClient.get<{ success: boolean; data: StaffMember }>(
-      `/restaurants/${restaurantId}/staff/${userId}`
-    );
-    return res.data;
+    return await apiClient.get<StaffMember>(`/restaurants/${restaurantId}/staff/${userId}`);
   },
 
   /**
-   * Creates a staff member directly or issues an invitation
+   * Creates a staff member directly or issues an invitation.
+   * Backend returns `data: { member?, invitation? }`.
    */
   async createOrInviteStaff(
     restaurantId: string,
     data: CreateStaffData
   ): Promise<{
     member?: StaffMember;
-    invitation?: {
-      id: string;
-      rawToken: string;
-      expiresAt: string;
-      onboardingUrl: string;
-    };
+    invitation?: StaffInvitationResult;
   }> {
-    const res = await apiClient.post<{
-      success: boolean;
-      data: {
-        member?: StaffMember;
-        invitation?: {
-          id: string;
-          rawToken: string;
-          expiresAt: string;
-          onboardingUrl: string;
-        };
-      };
+    return await apiClient.post<{
+      member?: StaffMember;
+      invitation?: StaffInvitationResult;
     }>(`/restaurants/${restaurantId}/staff`, data);
-    return res.data;
   },
 
   /**
-   * Updates an employee's permissions and template
+   * Updates an employee's permissions and template.
    */
   async updateStaffPermissions(
     restaurantId: string,
     userId: string,
     permissions: string[],
     jobTemplate?: string
-  ): Promise<{ success: boolean; permissions: string[]; jobTemplate?: string }> {
-    const res = await apiClient.put<{
+  ): Promise<{ success: boolean; permissions: string[]; jobTemplate?: string | null }> {
+    return await apiClient.put<{
       success: boolean;
-      data: { permissions: string[]; jobTemplate?: string };
+      permissions: string[];
+      jobTemplate?: string | null;
     }>(`/restaurants/${restaurantId}/staff/${userId}/permissions`, {
       permissions,
       jobTemplate,
     });
-    return {
-      success: true,
-      permissions: res.data.permissions,
-      jobTemplate: res.data.jobTemplate,
-    };
   },
 
   /**
-   * Enables or disables staff access to this restaurant
+   * Enables or disables staff access to this restaurant.
    */
   async updateStaffStatus(
     restaurantId: string,
     userId: string,
     status: 'ACTIVE' | 'DISABLED'
   ): Promise<{ success: boolean; status: 'ACTIVE' | 'DISABLED' }> {
-    const res = await apiClient.patch<{
-      success: boolean;
-      data: { status: 'ACTIVE' | 'DISABLED' };
-    }>(`/restaurants/${restaurantId}/staff/${userId}/status`, { status });
-    return {
-      success: true,
-      status: res.data.status,
-    };
+    return await apiClient.patch<{ success: boolean; status: 'ACTIVE' | 'DISABLED' }>(
+      `/restaurants/${restaurantId}/staff/${userId}/status`,
+      { status }
+    );
   },
 
   /**
-   * Removes staff from this restaurant tenant
+   * Removes staff from this restaurant tenant. Backend has no `data` envelope.
    */
-  async removeStaff(restaurantId: string, userId: string): Promise<{ success: boolean; message: string }> {
-    const res = await apiClient.delete<{ success: boolean; message: string }>(
+  async removeStaff(restaurantId: string, userId: string): Promise<void> {
+    await apiClient.delete<{ success: boolean; message: string }>(
       `/restaurants/${restaurantId}/staff/${userId}`
     );
-    return res;
   },
 
   /**
-   * Resends invitation, revoking older token
+   * Resends invitation, revoking older token.
+   * Backend returns `data: { invitation }`.
    */
   async resendStaffInvitation(
     restaurantId: string,
     invitationId: string
-  ): Promise<{
-    invitation: {
-      id: string;
-      rawToken: string;
-      expiresAt: string;
-      onboardingUrl: string;
-    };
-  }> {
-    const res = await apiClient.post<{
-      success: boolean;
-      data: {
-        invitation: {
-          id: string;
-          rawToken: string;
-          expiresAt: string;
-          onboardingUrl: string;
-        };
-      };
-    }>(`/restaurants/${restaurantId}/staff/invitations/${invitationId}/resend`);
-    return res.data;
+  ): Promise<{ invitation: StaffInvitationResult }> {
+    return await apiClient.post<{ invitation: StaffInvitationResult }>(
+      `/restaurants/${restaurantId}/staff/invitations/${invitationId}/resend`
+    );
   },
 
   /**
-   * Revokes an active pending invitation
+   * Revokes an active pending invitation. Backend has no `data` envelope.
    */
-  async revokeStaffInvitation(
-    restaurantId: string,
-    invitationId: string
-  ): Promise<{ success: boolean; message: string }> {
-    const res = await apiClient.delete<{ success: boolean; message: string }>(
+  async revokeStaffInvitation(restaurantId: string, invitationId: string): Promise<void> {
+    await apiClient.delete<{ success: boolean; message: string }>(
       `/restaurants/${restaurantId}/staff/invitations/${invitationId}`
     );
-    return res;
   },
 
   /**
-   * Public onboarding: validates token
+   * Public onboarding: validates token.
    */
   async validateStaffInvitation(token: string): Promise<StaffInvitationValidateResult> {
-    const res = await apiClient.get<{
-      success: boolean;
-      data: StaffInvitationValidateResult;
-    }>(`/staff/invitations/${token}`);
-    return res.data;
+    return await apiClient.get<StaffInvitationValidateResult>(`/staff/invitations/${token}`);
   },
 
   /**
-   * Public onboarding: accepts invitation and sets password
+   * Public onboarding: accepts invitation and sets password.
+   * Backend returns `data: { success, token, user, restaurant }`.
    */
   async acceptStaffInvitation(
     token: string,
     data: { password: string; name?: string }
   ): Promise<{
-    user: { id: string; email: string; name: string };
+    success: boolean;
     token: string;
-    restaurants: any[];
+    user: { id: string; email: string; name: string };
+    restaurant: { id: string; name: string; slug: string };
   }> {
     const res = await apiClient.post<{
       success: boolean;
-      data: {
-        user: { id: string; email: string; name: string };
-        token: string;
-        restaurants: any[];
-      };
+      token: string;
+      user: { id: string; email: string; name: string };
+      restaurant: { id: string; name: string; slug: string };
     }>(`/staff/invitations/${token}/accept`, data);
 
-    if (res.data.token && typeof window !== 'undefined') {
-      localStorage.setItem('aura_admin_token', res.data.token);
-      localStorage.setItem('aura_admin_user', JSON.stringify(res.data.user));
+    if (res.token && typeof window !== 'undefined') {
+      localStorage.setItem('aura_admin_token', res.token);
+      localStorage.setItem('aura_admin_user', JSON.stringify(res.user));
     }
 
-    return res.data;
+    return res;
   },
 };

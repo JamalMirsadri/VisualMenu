@@ -41,8 +41,10 @@ staffRouter.get(
 
       res.status(200).json({
         success: true,
-        data: result.members,
-        invitations: result.invitations,
+        data: {
+          members: result.members,
+          invitations: result.invitations,
+        },
       });
     } catch (err) {
       next(err);

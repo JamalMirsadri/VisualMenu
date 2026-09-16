@@ -264,13 +264,13 @@ export const AdminStaffPage: React.FC = () => {
         password: inviteForm.isDirectPassword && inviteForm.password ? inviteForm.password : undefined,
       });
 
-      if (result.invitation?.onboardingUrl) {
+      if (result?.member) {
+        setSuccessMsg(`Staff member ${inviteForm.name} created successfully.`);
+        setShowInviteModal(false);
+      } else if (result?.invitation?.onboardingUrl) {
         const fullUrl = `${window.location.origin}${result.invitation.onboardingUrl}`;
         setCreatedInviteLink(fullUrl);
         setSuccessMsg(`Invitation created for ${inviteForm.name}`);
-      } else {
-        setSuccessMsg(`Staff member ${inviteForm.name} created successfully.`);
-        setShowInviteModal(false);
       }
       fetchData();
     } catch (err: any) {
@@ -296,6 +296,7 @@ export const AdminStaffPage: React.FC = () => {
       setSelectedPermissions(catalog.templates['WAITER'] || []);
       setSelectedTemplate('WAITER');
     }
+    setPermissionSearch('');
     setCreatedInviteLink(null);
     setCopiedLink(false);
     setShowInviteModal(true);
@@ -928,7 +929,7 @@ export const AdminStaffPage: React.FC = () => {
       {/* MODAL 2: INVITE / CREATE STAFF MODAL */}
       {showInviteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
             {/* Modal Header */}
             <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
               <div>
@@ -1069,6 +1070,75 @@ export const AdminStaffPage: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Permission Matrix */}
+                <div className="p-3 rounded-xl bg-zinc-900/50 border border-zinc-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-white">Permissions</span>
+                    <span className="text-[10px] font-mono text-zinc-400">
+                      {selectedPermissions.length} selected
+                    </span>
+                  </div>
+
+                  <div className="relative mb-2">
+                    <Search className="w-3.5 h-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Filter permissions..."
+                      value={permissionSearch}
+                      onChange={(e) => setPermissionSearch(e.target.value)}
+                      className="w-full text-xs bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-white placeholder-zinc-400 focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto space-y-3 pr-1">
+                    {Object.entries(groupedPermissions).map(([groupName, groupPerms]) => {
+                      const groupKeys = groupPerms.map((p) => p.key);
+                      const allGroupSelected = groupKeys.every((k) => selectedPermissions.includes(k));
+
+                      return (
+                        <div
+                          key={groupName}
+                          className="bg-zinc-950/40 border border-zinc-800/60 rounded-lg overflow-hidden"
+                        >
+                          <div className="px-3 py-2 bg-zinc-900/80 border-b border-zinc-800/60 flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-zinc-200 uppercase tracking-wide">
+                              {groupName}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleGroupSelection(groupPerms)}
+                              className="text-[10px] text-zinc-400 hover:text-amber-400 cursor-pointer"
+                            >
+                              {allGroupSelected ? 'Deselect all' : 'Select all'}
+                            </button>
+                          </div>
+                          <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {groupPerms.map((perm) => {
+                              const isChecked = selectedPermissions.includes(perm.key);
+                              return (
+                                <label
+                                  key={perm.key}
+                                  className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer text-[11px] ${
+                                    isChecked ? 'text-white' : 'text-zinc-400'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => togglePermission(perm.key)}
+                                    className="rounded border-zinc-700 text-amber-500 focus:ring-amber-400"
+                                  />
+                                  <span className="truncate">{perm.label}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Provisioning Mode Toggle */}
                 <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-2">
                   <div className="flex items-center justify-between">
@@ -1102,16 +1172,6 @@ export const AdminStaffPage: React.FC = () => {
                       />
                     </div>
                   )}
-                </div>
-
-                {/* Summary of permissions */}
-                <div className="p-3 rounded-xl bg-zinc-900/50 border border-zinc-800 flex items-center justify-between text-xs">
-                  <span className="text-zinc-400">
-                    Template grants <strong className="text-amber-400">{selectedPermissions.length}</strong> permissions
-                  </span>
-                  <span className="text-[10px] text-zinc-400">
-                    Customizable in matrix after creation
-                  </span>
                 </div>
 
                 {/* Submit button */}
