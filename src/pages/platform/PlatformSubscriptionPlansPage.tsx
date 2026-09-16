@@ -31,6 +31,7 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
   const [trialDays, setTrialDays] = useState('14');
   const [gracePeriodDays, setGracePeriodDays] = useState('7');
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
+  const [includedVideoCredits, setIncludedVideoCredits] = useState('0');
   const [submitting, setSubmitting] = useState(false);
 
   const loadPlans = async () => {
@@ -60,6 +61,7 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
     setTrialDays('14');
     setGracePeriodDays('7');
     setSelectedFeatures([]);
+    setIncludedVideoCredits('0');
     setModalOpen(true);
   };
 
@@ -74,6 +76,7 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
     setTrialDays(plan.trialDays !== null && plan.trialDays !== undefined ? String(plan.trialDays) : '');
     setGracePeriodDays(String(plan.gracePeriodDays));
     setSelectedFeatures(plan.features || []);
+    setIncludedVideoCredits(String(plan.includedVideoCredits || 0));
     setModalOpen(true);
   };
 
@@ -91,6 +94,7 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
           trialDays: trialDays ? parseInt(trialDays, 10) : null,
           gracePeriodDays: parseInt(gracePeriodDays, 10),
           features: selectedFeatures,
+          includedVideoCredits: parseInt(includedVideoCredits, 10) || 0,
         });
         setFeedback({ type: 'success', message: `Plan ${name} updated successfully.` });
       } else {
@@ -105,6 +109,7 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
           trialDays: trialDays ? parseInt(trialDays, 10) : null,
           gracePeriodDays: parseInt(gracePeriodDays, 10),
           features: selectedFeatures,
+          includedVideoCredits: parseInt(includedVideoCredits, 10) || 0,
         });
         setFeedback({ type: 'success', message: `Plan ${name} created successfully.` });
       }
@@ -232,6 +237,10 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
                   <div className="flex justify-between">
                     <span>Grace Period:</span>
                     <span className="text-zinc-200">{p.gracePeriodDays} Days</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Video Credits:</span>
+                    <span className="text-zinc-200">{p.includedVideoCredits || 0}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Status:</span>
@@ -366,6 +375,17 @@ export const PlatformSubscriptionPlansPage: React.FC = () => {
                     className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white font-mono focus:border-amber-500 focus:outline-none"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-400 font-semibold mb-1">Included Video Credits</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={includedVideoCredits}
+                  onChange={(e) => setIncludedVideoCredits(e.target.value)}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-white font-mono focus:border-amber-500 focus:outline-none"
+                />
               </div>
 
               <div>

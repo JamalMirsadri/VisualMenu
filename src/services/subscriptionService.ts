@@ -24,6 +24,7 @@ export interface SubscriptionPlan {
   gracePeriodDays: number;
   active: boolean;
   features?: string[];
+  includedVideoCredits?: number;
 }
 
 export interface SubscriptionDetails {

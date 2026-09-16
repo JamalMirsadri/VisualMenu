@@ -4,6 +4,7 @@ export const FEATURE_KEYS = [
   'CUSTOMER_ANALYTICS',
   'AI_INSIGHTS',
   'ADVANCED_FORECASTING',
+  'AI_FOOD_VIDEO',
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
@@ -14,4 +15,5 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   CUSTOMER_ANALYTICS: 'Customer Analytics',
   AI_INSIGHTS: 'AI Insights',
   ADVANCED_FORECASTING: 'Advanced Forecasting',
+  AI_FOOD_VIDEO: 'AI Food Video Studio',
 };

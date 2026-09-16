@@ -50,6 +50,11 @@ export class RestaurantDeletionService {
       await tx.media.deleteMany({ where: { restaurantId } });
       await tx.category.deleteMany({ where: { restaurantId } });
 
+      // AI Food Video Studio
+      await tx.videoGenerationJob.deleteMany({ where: { restaurantId } });
+      await tx.videoCreditLedger.deleteMany({ where: { restaurantId } });
+      await tx.videoCreditPurchase.deleteMany({ where: { restaurantId } });
+
       // Tables & QR
       await tx.qrCode.deleteMany({ where: { restaurantId } });
       await tx.table.deleteMany({ where: { restaurantId } });

@@ -26,6 +26,9 @@ import { staffInvitationRouter } from './routes/staffInvitationRoutes';
 import { subscriptionRouter } from './routes/subscriptionRoutes';
 import { notificationRouter } from './routes/notificationRoutes';
 import { qrTemplateRouter, qrTemplateRestaurantRouter } from './routes/qrTemplateRoutes';
+import { videoTemplateRouter } from './routes/videoTemplateRoutes';
+import { aiVideoRouter } from './routes/aiVideoRoutes';
+import { videoCreditRouter } from './routes/videoCreditRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { authenticateToken } from './middleware/authMiddleware';
 import { requireActiveSubscription } from './middleware/subscriptionMiddleware';
@@ -108,8 +111,11 @@ app.use('/api', authenticateToken, requireActiveSubscription(), userRouter);
 app.use('/api', authenticateToken, requireActiveSubscription(), staffRouter);
 app.use('/api', authenticateToken, requireActiveSubscription(), auditRouter);
 app.use('/api', authenticateToken, requireActiveSubscription(), qrTemplateRestaurantRouter);
+app.use('/api', authenticateToken, requireActiveSubscription(), aiVideoRouter);
 app.use('/api/platform', authenticateToken, platformRouter);
 app.use('/api/platform', authenticateToken, qrTemplateRouter);
+app.use('/api/platform', authenticateToken, videoTemplateRouter);
+app.use('/api/platform', authenticateToken, videoCreditRouter);
 app.use('/api/platform', authenticateToken, platformAnalyticsRouter);
 
 // Centralized Error Handling
