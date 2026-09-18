@@ -1,18 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Check,
+  Image as ImageIcon,
   Layers,
+  Loader2,
   Palette,
   Save,
   Shield,
   Sliders,
   Sparkles,
+  Trash2,
+  Upload,
   Video,
 } from 'lucide-react';
 import { useAdminData } from '../../hooks/useAdminData';
 import { RestaurantDataGate } from '../../components/admin/RestaurantDataGate';
 import { ErrorBanner } from '../../components/admin/ErrorBanner';
 import { settingsService } from '../../services/settingsService';
+import { mediaService } from '../../services/mediaService';
 import { THEME_REGISTRY } from '../../theme/themeConfig';
 import type { ThemeDefinition } from '../../theme/themeConfig';
 import type { RestaurantSettings } from '../../types';
@@ -83,6 +88,13 @@ export const AdminRestaurantPage: React.FC = () => {
     serviceChargeRate: '0.00',
   });
 
+  // Brand asset upload state (logo / cover / favicon)
+  const [uploadingField, setUploadingField] = useState<'logo' | 'coverImage' | 'favicon' | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
+  const faviconInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (restaurant) {
       setRestaurantData({
@@ -132,6 +144,44 @@ export const AdminRestaurantPage: React.FC = () => {
 
   const handleSettingsChange = (field: string, value: any) => {
     setSettingsData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const MAX_BRAND_ASSET_SIZE = 10 * 1024 * 1024; // 10MB
+
+  const handleBrandAssetUpload = async (
+    field: 'logo' | 'coverImage' | 'favicon',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file || !restaurant) return;
+
+    if (!file.type.startsWith('image/')) {
+      setUploadError('Please choose an image file (PNG, JPG, WebP, SVG, etc.).');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > MAX_BRAND_ASSET_SIZE) {
+      setUploadError('Image is too large. Maximum allowed size is 10MB.');
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      setUploadingField(field);
+      setUploadError(null);
+      const media = await mediaService.uploadFile(restaurant.id, file);
+      handleRestaurantChange(field, media.url);
+    } catch (err: any) {
+      setUploadError(err.message || 'Upload failed. Please try again.');
+    } finally {
+      setUploadingField(null);
+      e.target.value = '';
+    }
+  };
+
+  const handleBrandAssetRemove = (field: 'logo' | 'coverImage' | 'favicon') => {
+    setUploadError(null);
+    handleRestaurantChange(field, '');
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -280,43 +330,122 @@ export const AdminRestaurantPage: React.FC = () => {
             </div>
 
             {/* Brand Assets */}
+            {uploadError && (
+              <div className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+                {uploadError}
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-zinc-800/80">
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Logo URL</label>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">Logo</label>
                 <input
                   type="text"
                   value={restaurantData.logo}
                   onChange={(e) => handleRestaurantChange('logo', e.target.value)}
+                  placeholder="https://.../logo.png"
                   className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs mb-2"
                 />
-                {restaurantData.logo && (
-                  <img
-                    src={restaurantData.logo}
-                    alt="Logo preview"
-                    className="w-12 h-12 rounded-xl object-cover border border-zinc-700"
+                <div className="flex items-center gap-2">
+                  {restaurantData.logo ? (
+                    <img
+                      src={restaurantData.logo}
+                      alt="Logo preview"
+                      className="w-12 h-12 rounded-xl object-cover border border-zinc-700 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-center text-zinc-600 shrink-0">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                  )}
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleBrandAssetUpload('logo', e)}
+                    className="hidden"
                   />
-                )}
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    disabled={uploadingField === 'logo'}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-semibold transition disabled:opacity-50"
+                  >
+                    {uploadingField === 'logo' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5" />
+                    )}
+                    <span>{uploadingField === 'logo' ? 'Uploading…' : 'Upload'}</span>
+                  </button>
+                  {restaurantData.logo && (
+                    <button
+                      type="button"
+                      onClick={() => handleBrandAssetRemove('logo')}
+                      className="p-2 rounded-xl bg-zinc-800 hover:bg-red-950/40 border border-zinc-700 text-zinc-400 hover:text-red-400 transition"
+                      title="Remove logo"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Cover Image URL</label>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">Cover Image</label>
                 <input
                   type="text"
                   value={restaurantData.coverImage}
                   onChange={(e) => handleRestaurantChange('coverImage', e.target.value)}
+                  placeholder="https://.../cover.jpg"
                   className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs mb-2"
                 />
-                {restaurantData.coverImage && (
-                  <img
-                    src={restaurantData.coverImage}
-                    alt="Cover preview"
-                    className="w-24 h-12 rounded-xl object-cover border border-zinc-700"
+                <div className="flex items-center gap-2">
+                  {restaurantData.coverImage ? (
+                    <img
+                      src={restaurantData.coverImage}
+                      alt="Cover preview"
+                      className="w-24 h-12 rounded-xl object-cover border border-zinc-700 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-24 h-12 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-center text-zinc-600 shrink-0">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                  )}
+                  <input
+                    ref={coverInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleBrandAssetUpload('coverImage', e)}
+                    className="hidden"
                   />
-                )}
+                  <button
+                    type="button"
+                    onClick={() => coverInputRef.current?.click()}
+                    disabled={uploadingField === 'coverImage'}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-semibold transition disabled:opacity-50"
+                  >
+                    {uploadingField === 'coverImage' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5" />
+                    )}
+                    <span>{uploadingField === 'coverImage' ? 'Uploading…' : 'Upload'}</span>
+                  </button>
+                  {restaurantData.coverImage && (
+                    <button
+                      type="button"
+                      onClick={() => handleBrandAssetRemove('coverImage')}
+                      className="p-2 rounded-xl bg-zinc-800 hover:bg-red-950/40 border border-zinc-700 text-zinc-400 hover:text-red-400 transition"
+                      title="Remove cover image"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Favicon URL (Browser Tab)</label>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">Favicon (Browser Tab)</label>
                 <input
                   type="text"
                   value={restaurantData.favicon}
@@ -324,13 +453,49 @@ export const AdminRestaurantPage: React.FC = () => {
                   placeholder="https://.../favicon.ico"
                   className="w-full px-3 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs mb-2"
                 />
-                {restaurantData.favicon && (
-                  <img
-                    src={restaurantData.favicon}
-                    alt="Favicon preview"
-                    className="w-7 h-7 rounded-md object-contain border border-zinc-700"
+                <div className="flex items-center gap-2">
+                  {restaurantData.favicon ? (
+                    <img
+                      src={restaurantData.favicon}
+                      alt="Favicon preview"
+                      className="w-8 h-8 rounded-md object-contain border border-zinc-700 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-md bg-zinc-950 border border-zinc-800 flex items-center justify-center text-zinc-600 shrink-0">
+                      <ImageIcon className="w-4 h-4" />
+                    </div>
+                  )}
+                  <input
+                    ref={faviconInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleBrandAssetUpload('favicon', e)}
+                    className="hidden"
                   />
-                )}
+                  <button
+                    type="button"
+                    onClick={() => faviconInputRef.current?.click()}
+                    disabled={uploadingField === 'favicon'}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-xs font-semibold transition disabled:opacity-50"
+                  >
+                    {uploadingField === 'favicon' ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5" />
+                    )}
+                    <span>{uploadingField === 'favicon' ? 'Uploading…' : 'Upload'}</span>
+                  </button>
+                  {restaurantData.favicon && (
+                    <button
+                      type="button"
+                      onClick={() => handleBrandAssetRemove('favicon')}
+                      className="p-2 rounded-xl bg-zinc-800 hover:bg-red-950/40 border border-zinc-700 text-zinc-400 hover:text-red-400 transition"
+                      title="Remove favicon"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
