@@ -421,7 +421,7 @@ export const CustomerGameBoard: React.FC<CustomerGameBoardProps> = ({
               ))}
           </div>
           <button onClick={onExit} className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-sm">
-            Back to Menu
+            Back to Order
           </button>
         </motion.div>
       )}
@@ -432,7 +432,7 @@ export const CustomerGameBoard: React.FC<CustomerGameBoardProps> = ({
           <h3 className="font-serif-luxury text-xl font-bold text-white">Game cancelled</h3>
           <p className="text-xs text-zinc-500 mt-1 mb-4">This game is no longer active.</p>
           <button onClick={onExit} className="px-6 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 font-semibold text-sm">
-            Back to Menu
+            Back to Order
           </button>
         </div>
       )}

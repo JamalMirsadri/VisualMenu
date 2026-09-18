@@ -56,6 +56,12 @@ export const customerGameService = {
     return apiClient.get(`/restaurants/${restaurantId}/games/availability`);
   },
 
+  getGame(restaurantId: string, gameSessionId: string, token: string): Promise<{ game: GameSessionDto }> {
+    return apiClient.get(`/restaurants/${restaurantId}/games/${gameSessionId}`, {
+      Authorization: `Bearer ${token}`,
+    });
+  },
+
   getTableGame(restaurantId: string, tableId: string): Promise<{ game: GameSessionDto | null }> {
     return apiClient.get(`/restaurants/${restaurantId}/games/table/${tableId}`);
   },

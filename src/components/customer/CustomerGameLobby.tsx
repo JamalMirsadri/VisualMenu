@@ -24,6 +24,7 @@ import {
 import { CustomerGameBoard } from './CustomerGameBoard';
 
 const PLAYER_KEY_STORAGE = 'aura_game_player_key';
+const ACTIVE_GAME_STORAGE = 'aura_active_game';
 
 function getPlayerKey(): string {
   if (typeof window === 'undefined') return '';
@@ -76,6 +77,40 @@ export const CustomerGameLobby: React.FC<CustomerGameLobbyProps> = ({ restaurant
         .catch(() => setTableGame(null));
     }
   }, [privateEnabled, table?.id, restaurantId]);
+
+  // Restore an active game for this restaurant (e.g. returning after refresh).
+  useEffect(() => {
+    let cancelled = false;
+    try {
+      const raw = window.localStorage.getItem(ACTIVE_GAME_STORAGE);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (!saved || saved.restaurantId !== restaurantId || !saved.sessionId || !saved.token || !saved.playerId) return;
+      customerGameService
+        .getGame(restaurantId, saved.sessionId, saved.token)
+        .then((res) => {
+          if (cancelled) return;
+          const game = res.game;
+          if (game.status === 'WAITING' || game.status === 'IN_PROGRESS') {
+            setSession(game);
+            setToken(saved.token);
+            setPlayer(game.players.find((p) => p.id === saved.playerId) || null);
+            setMode(game.mode);
+            setStage('active');
+          } else {
+            window.localStorage.removeItem(ACTIVE_GAME_STORAGE);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) window.localStorage.removeItem(ACTIVE_GAME_STORAGE);
+        });
+    } catch {
+      /* ignore malformed storage */
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [restaurantId]);
 
   // SSE subscription while the lobby is waiting (board owns its own stream).
   useEffect(() => {
@@ -150,12 +185,13 @@ export const CustomerGameLobby: React.FC<CustomerGameLobbyProps> = ({ restaurant
     setBusy(true);
     setError(null);
     try {
+      let result;
       if (mode === 'PRIVATE') {
         if (!table?.id) {
           setError('A table is required to play with your table.');
           return;
         }
-        const result =
+        result =
           tableGame && tableGame.status === 'WAITING'
             ? await customerGameService.joinPrivate(restaurantId, tableGame.id, {
                 tableId: table.id,
@@ -167,19 +203,30 @@ export const CustomerGameLobby: React.FC<CustomerGameLobbyProps> = ({ restaurant
                 alias: trimmed,
                 playerKey,
               });
-        setSession(result.session);
-        setPlayer(result.player);
-        setToken(result.token);
       } else {
-        const result = await customerGameService.joinRandom(restaurantId, {
+        result = await customerGameService.joinRandom(restaurantId, {
           alias: trimmed,
           playerKey,
         });
-        setSession(result.session);
-        setPlayer(result.player);
-        setToken(result.token);
       }
+      setSession(result.session);
+      setPlayer(result.player);
+      setToken(result.token);
       setStage('active');
+      try {
+        window.localStorage.setItem(
+          ACTIVE_GAME_STORAGE,
+          JSON.stringify({
+            restaurantId,
+            sessionId: result.session.id,
+            token: result.token,
+            playerId: result.player.id,
+            mode: result.session.mode,
+          })
+        );
+      } catch {
+        /* storage may be unavailable */
+      }
     } catch (err: any) {
       setError(err.message || 'Unable to join a game.');
     } finally {
@@ -209,6 +256,11 @@ export const CustomerGameLobby: React.FC<CustomerGameLobbyProps> = ({ restaurant
     try {
       const res = await customerGameService.cancel(restaurantId, session.id, token);
       setSession(res.game);
+      try {
+        window.localStorage.removeItem(ACTIVE_GAME_STORAGE);
+      } catch {
+        /* ignore */
+      }
     } catch (err: any) {
       setError(err.message || 'Unable to cancel the game.');
     } finally {
@@ -229,6 +281,11 @@ export const CustomerGameLobby: React.FC<CustomerGameLobbyProps> = ({ restaurant
       setPlayer(null);
       setToken(null);
       setStage('select');
+      try {
+        window.localStorage.removeItem(ACTIVE_GAME_STORAGE);
+      } catch {
+        /* ignore */
+      }
     } catch (err: any) {
       setError(err.message || 'Unable to leave.');
     } finally {
@@ -278,6 +335,16 @@ export const CustomerGameLobby: React.FC<CustomerGameLobbyProps> = ({ restaurant
           </div>
           <button onClick={onClose} aria-label="Close" className="p-2 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white">
             <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-5 pt-3">
+          <button
+            onClick={onClose}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800 text-zinc-300 hover:text-white text-sm font-semibold transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Back to Order</span>
           </button>
         </div>
 

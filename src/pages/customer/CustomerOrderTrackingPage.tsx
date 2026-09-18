@@ -128,6 +128,8 @@ const STATUS_DETAILS: Record<
 
 type ConnectionStatus = 'connected' | 'reconnecting' | 'offline';
 
+const ACTIVE_GAME_STORAGE = 'aura_active_game';
+
 export const CustomerOrderTrackingPage: React.FC = () => {
   const { publicOrderToken } = useParams<{ publicOrderToken: string }>();
   const [order, setOrder] = useState<Order | null>(null);
@@ -140,6 +142,7 @@ export const CustomerOrderTrackingPage: React.FC = () => {
   const [loadingReceipt, setLoadingReceipt] = useState(false);
   const [gameConfig, setGameConfig] = useState<GameConfigDto | null>(null);
   const [showGameLobby, setShowGameLobby] = useState(false);
+  const [hasActiveGame, setHasActiveGame] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -191,6 +194,48 @@ export const CustomerOrderTrackingPage: React.FC = () => {
       cancelled = true;
     };
   }, [order?.restaurantId]);
+
+  // Detect whether this customer already has an active game for this restaurant.
+  useEffect(() => {
+    if (!order?.restaurantId) return;
+    try {
+      const raw = window.localStorage.getItem(ACTIVE_GAME_STORAGE);
+      if (!raw) {
+        setHasActiveGame(false);
+        return;
+      }
+      const saved = JSON.parse(raw);
+      setHasActiveGame(saved?.restaurantId === order.restaurantId && Boolean(saved?.sessionId));
+    } catch {
+      setHasActiveGame(false);
+    }
+  }, [order?.restaurantId, showGameLobby]);
+
+  const openGameLobby = () => {
+    setShowGameLobby(true);
+    try {
+      window.history.pushState({ gameLobbyOpen: true }, '');
+    } catch {
+      /* history may be unavailable */
+    }
+  };
+
+  const closeGameLobby = () => {
+    if (window.history.state?.gameLobbyOpen) {
+      window.history.back();
+    } else {
+      setShowGameLobby(false);
+    }
+  };
+
+  // Browser Back closes the game overlay and returns to the Order Tracking view.
+  useEffect(() => {
+    const handlePopState = () => {
+      setShowGameLobby(false);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Initial fetch on mount
   useEffect(() => {
@@ -536,15 +581,15 @@ export const CustomerOrderTrackingPage: React.FC = () => {
           </AnimatePresence>
         </div>
 
-        {/* Play While You Wait (moved from menu header) */}
-        {gameConfig?.enabled && (
+        {/* Play While You Wait / Return to Game */}
+        {gameConfig?.enabled && !isCancelled && order.status !== 'COMPLETED' && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35 }}
           >
             <button
-              onClick={() => setShowGameLobby(true)}
+              onClick={openGameLobby}
               className="w-full p-5 rounded-3xl bg-zinc-900/60 border border-zinc-800/80 shadow-xl flex items-center justify-between gap-3 hover:border-amber-500/40 transition text-left"
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -552,9 +597,13 @@ export const CustomerOrderTrackingPage: React.FC = () => {
                   <Gamepad2 className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-white">Play While You Wait</h3>
+                  <h3 className="text-sm font-semibold text-white">
+                    {hasActiveGame ? 'Return to Game' : 'Play While You Wait'}
+                  </h3>
                   <p className="text-xs text-zinc-400 mt-0.5">
-                    Pass the time with a quick game at your table.
+                    {hasActiveGame
+                      ? 'Resume your active game.'
+                      : 'Pass the time with a quick game at your table.'}
                   </p>
                 </div>
               </div>
@@ -948,7 +997,7 @@ export const CustomerOrderTrackingPage: React.FC = () => {
           restaurant={order.restaurant}
           table={order.table ? { id: order.table.id, number: order.table.number, name: order.table.name } : null}
           config={gameConfig}
-          onClose={() => setShowGameLobby(false)}
+          onClose={closeGameLobby}
         />
       )}
     </div>
