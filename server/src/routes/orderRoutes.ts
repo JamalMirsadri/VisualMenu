@@ -9,6 +9,7 @@ import { orderCreationRateLimiter, orderTrackingRateLimiter } from '../middlewar
 import { NifValidator } from '../services/fiscal/nifValidator';
 import { CashPaymentService } from '../services/payment/cashPaymentService';
 import { CustomerService } from '../services/customerService';
+import { terminatePrivateGameByTable } from '../services/gameOrderLifecycle';
 import { hasPermission } from '../constants/permissions';
 import { requireActiveSubscription, requireRestaurantServiceActive } from '../middleware/subscriptionMiddleware';
 
@@ -942,6 +943,15 @@ orderRouter.patch(
       // Emit Realtime event
       realtimeService.notifyOrderStatusChanged(restaurantId, updatedOrder, order.status, targetStatus);
 
+      // Terminate any active private game for this table when the order is finalized.
+      if (targetStatus === OrderStatus.COMPLETED || targetStatus === OrderStatus.CANCELLED) {
+        await terminatePrivateGameByTable(
+          restaurantId,
+          updatedOrder.tableId,
+          targetStatus === OrderStatus.COMPLETED ? 'FINISHED' : 'CANCELLED'
+        ).catch(() => {});
+      }
+
       res.status(200).json({
         success: true,
         message: `Order status updated to '${targetStatus}'.`,
@@ -1161,6 +1171,9 @@ orderRouter.post(
 
       // Emit Realtime event
       realtimeService.notifyOrderStatusChanged(restaurantId, updated, order.status, OrderStatus.CANCELLED);
+
+      // Terminate any active private game for this table.
+      await terminatePrivateGameByTable(restaurantId, updated.tableId, 'CANCELLED').catch(() => {});
 
       res.status(200).json({
         success: true,

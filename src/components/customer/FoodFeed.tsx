@@ -27,6 +27,7 @@ export interface FoodFeedProps {
   foods: FoodItem[];
   favorites: string[];
   onToggleFavorite: (foodId: string) => void;
+  table?: { id: string; number?: string; name?: string } | null;
   language?: string;
   mode?: 'mobile' | 'tablet' | 'desktop' | 'auto';
   onActiveFoodChange?: (food: FoodItem) => void;
@@ -38,6 +39,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
   foods,
   favorites,
   onToggleFavorite,
+  table,
   language,
   mode = 'auto',
   onActiveFoodChange,
@@ -288,7 +290,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
       }>
         {/* Floating Top Controls: Header + Category Bar */}
         <div className="absolute inset-x-0 top-0 z-30 flex flex-col pointer-events-none">
-          <MenuHeader restaurant={restaurant} />
+          <MenuHeader restaurant={restaurant} table={table} />
           <CategoryNav
             categories={categories}
             activeCategoryId={activeCategoryId}

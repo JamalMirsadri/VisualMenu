@@ -1,16 +1,23 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Globe, Info, MapPin, Phone, ShieldCheck, ShoppingBag, X } from 'lucide-react';
+import { Globe, Info, MapPin, Phone, ShieldCheck, ShoppingBag, Gift, Gamepad2, X } from 'lucide-react';
 import type { Restaurant } from '../../types';
 import { useCart } from '../../context/CartContext';
+import { CustomerLoyaltyPanel } from './CustomerLoyaltyPanel';
+import { CustomerGameLobby } from './CustomerGameLobby';
+import { customerGameService, type GameConfigDto } from '../../services/customerGameService';
 
 interface MenuHeaderProps {
   restaurant: Restaurant;
+  table?: { id: string; number?: string; name?: string } | null;
 }
 
-export const MenuHeader: React.FC<MenuHeaderProps> = ({ restaurant }) => {
+export const MenuHeader: React.FC<MenuHeaderProps> = ({ restaurant, table }) => {
   const [showInfo, setShowInfo] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
+  const [showLoyalty, setShowLoyalty] = useState(false);
+  const [showGameLobby, setShowGameLobby] = useState(false);
+  const [gameConfig, setGameConfig] = useState<GameConfigDto | null>(null);
   const [currentLang, setCurrentLang] = useState<string>(() => {
     return restaurant.settings?.language || 'en';
   });
@@ -23,6 +30,21 @@ export const MenuHeader: React.FC<MenuHeaderProps> = ({ restaurant }) => {
     document.documentElement.setAttribute('dir', isRtl ? 'rtl' : 'ltr');
     document.documentElement.setAttribute('lang', lang);
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    customerGameService
+      .getConfig(restaurant.id)
+      .then((cfg) => {
+        if (!cancelled && cfg.enabled) setGameConfig(cfg);
+      })
+      .catch(() => {
+        if (!cancelled) setGameConfig(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [restaurant.id]);
 
   return (
     <>
@@ -117,6 +139,26 @@ export const MenuHeader: React.FC<MenuHeaderProps> = ({ restaurant }) => {
             )}
           </button>
 
+          {/* My Loyalty Button */}
+          <button
+            onClick={() => setShowLoyalty(true)}
+            aria-label="My loyalty"
+            className="relative p-2 rounded-full bg-amber-500/20 backdrop-blur-md border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 active:scale-95 transition-all cursor-pointer"
+          >
+            <Gift className="w-4 h-4" />
+          </button>
+
+          {/* Play While You Wait Button */}
+          {gameConfig?.enabled && (
+            <button
+              onClick={() => setShowGameLobby(true)}
+              aria-label="Play while you wait"
+              className="relative p-2 rounded-full bg-amber-500/20 backdrop-blur-md border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 active:scale-95 transition-all cursor-pointer"
+            >
+              <Gamepad2 className="w-4 h-4" />
+            </button>
+          )}
+
           <button
             onClick={() => setShowInfo(true)}
             aria-label="Restaurant information"
@@ -195,6 +237,23 @@ export const MenuHeader: React.FC<MenuHeaderProps> = ({ restaurant }) => {
             </div>
           </div>
         </div>
+      )}
+      {/* My Loyalty Panel */}
+      {showLoyalty && (
+        <CustomerLoyaltyPanel
+          restaurant={restaurant}
+          onClose={() => setShowLoyalty(false)}
+        />
+      )}
+
+      {/* Play While You Wait Lobby */}
+      {showGameLobby && gameConfig && (
+        <CustomerGameLobby
+          restaurant={restaurant}
+          table={table ?? null}
+          config={gameConfig}
+          onClose={() => setShowGameLobby(false)}
+        />
       )}
     </>
   );

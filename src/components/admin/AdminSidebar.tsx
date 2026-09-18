@@ -25,6 +25,8 @@ import {
   BarChart3,
   Sparkles,
   Clapperboard,
+  Gamepad2,
+  Gift,
 } from 'lucide-react';
 import type { Restaurant } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -80,6 +82,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     ...(role === 'OWNER' ? [{ to: '/admin/subscription', label: 'Subscription', icon: CreditCard }] : []),
     { to: '/admin/restaurant', label: 'Restaurant Settings', icon: Settings, permission: 'MANAGE_RESTAURANT_SETTINGS' },
     { to: '/admin/payment-settings', label: 'Payment Settings', icon: Wallet, permission: 'MANAGE_RESTAURANT_SETTINGS' },
+    { to: '/admin/games', label: 'Games', icon: Gamepad2, permission: 'MANAGE_RESTAURANT_SETTINGS', feature: 'GAMES_LOYALTY' },
+    { to: '/admin/loyalty', label: 'Loyalty', icon: Gift, permission: 'MANAGE_RESTAURANT_SETTINGS', feature: 'GAMES_LOYALTY' },
   ];
 
   const visibleNavItems = allNavItems.filter(

@@ -9,6 +9,7 @@ export const FEATURE_KEYS = [
   'AI_INSIGHTS',
   'ADVANCED_FORECASTING',
   'AI_FOOD_VIDEO',
+  'GAMES_LOYALTY',
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
@@ -20,6 +21,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   AI_INSIGHTS: 'AI Insights',
   ADVANCED_FORECASTING: 'Advanced Forecasting',
   AI_FOOD_VIDEO: 'AI Food Video Studio',
+  GAMES_LOYALTY: 'Games & Loyalty',
 };
 
 /** Normalizes an arbitrary input array into a unique, valid feature-key list. */

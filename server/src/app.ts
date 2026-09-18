@@ -29,6 +29,9 @@ import { qrTemplateRouter, qrTemplateRestaurantRouter } from './routes/qrTemplat
 import { videoTemplateRouter } from './routes/videoTemplateRoutes';
 import { aiVideoRouter } from './routes/aiVideoRoutes';
 import { videoCreditRouter } from './routes/videoCreditRoutes';
+import { gameRouter } from './routes/gameRoutes';
+import { loyaltyRouter } from './routes/loyaltyRoutes';
+import { gameAdminRouter } from './routes/gameAdminRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { authenticateToken } from './middleware/authMiddleware';
 import { requireActiveSubscription } from './middleware/subscriptionMiddleware';
@@ -89,6 +92,9 @@ app.use('/api/menu', publicMenuRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/owner', ownerInvitationRouter);
 app.use('/api/staff', staffInvitationRouter);
+app.use('/api', gameAdminRouter); // Admin config (auth inline; before customer :gameSessionId route to avoid shadowing)
+app.use('/api', gameRouter); // Customer-facing games (public, feature-gated)
+app.use('/api', loyaltyRouter); // Customer-facing loyalty (public, feature-gated)
 app.use('/api', realtimeRouter); // Includes public /orders/track/:token/events and protected SSE
 app.use('/api', orderRouter); // Includes public POST /api/orders, cash settlement, receipts and customer order tracking
 app.use('/api', paymentRouter); // Includes public /payments, /payments/:id, webhooks and protected admin /restaurants/:id/payments

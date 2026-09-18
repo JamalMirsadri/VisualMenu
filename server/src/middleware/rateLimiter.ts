@@ -148,3 +148,39 @@ export const paymentCreationLimiterInstance = new SlidingWindowRateLimiter({
 });
 export const paymentCreationRateLimiter = paymentCreationLimiterInstance.middleware;
 
+/**
+ * 5. Loyalty Token Resolution Rate Limiter
+ * 30 resolution attempts per minute per IP (prevents token enumeration).
+ */
+export const loyaltyTokenResolutionLimiterInstance = new SlidingWindowRateLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: 'Loyalty token resolution rate limit exceeded. Please try again shortly.',
+  errorCode: 'LOYALTY_RATE_LIMIT_EXCEEDED',
+});
+export const loyaltyTokenResolutionRateLimiter = loyaltyTokenResolutionLimiterInstance.middleware;
+
+/**
+ * 6. Game action rate limiter (create/join/leave/matchmaking/start/cancel)
+ * 60 game actions per minute per IP.
+ */
+export const gameActionLimiterInstance = new SlidingWindowRateLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: 'Too many game actions. Please slow down.',
+  errorCode: 'GAME_RATE_LIMIT_EXCEEDED',
+});
+export const gameActionRateLimiter = gameActionLimiterInstance.middleware;
+
+/**
+ * 7. Game roll rate limiter (dice spam)
+ * 30 rolls per minute per IP.
+ */
+export const gameRollLimiterInstance = new SlidingWindowRateLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: 'Too many dice rolls. Please wait a moment.',
+  errorCode: 'ROLL_RATE_LIMIT_EXCEEDED',
+});
+export const gameRollRateLimiter = gameRollLimiterInstance.middleware;
+

@@ -682,4 +682,78 @@ export interface StaffInvitationValidateResult {
   };
 }
 
+// -----------------------------------------------------------------------------
+// Games + Loyalty (isolated bounded context)
+// -----------------------------------------------------------------------------
+
+export type GameType = 'SNAKES_LADDERS';
+export type GameMode = 'PRIVATE' | 'RANDOM';
+export type GameStatus = 'WAITING' | 'IN_PROGRESS' | 'FINISHED' | 'CANCELLED';
+export type PointsTransactionType = 'GAME_WIN' | 'REWARD_REDEEM' | 'ADMIN_ADJUST' | 'EXPIRY' | 'REFUND';
+export type RedemptionStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'FAILED';
+
+export interface GameConfig {
+  enabled: boolean;
+  modes: GameMode[];
+  minPlayers: number;
+  maxPlayers: number;
+  turnTimeoutSeconds: number;
+  pointRules?: Record<string, unknown> | null;
+  dailyPointsLimit: number;
+}
+
+export interface Reward {
+  id: string;
+  name: string;
+  description?: string | null;
+  pointsCost: number;
+  active: boolean;
+  unlimitedStock: boolean;
+  stock?: number | null;
+}
+
+export interface CustomerPointsLedgerEntry {
+  id: string;
+  customerId: string;
+  restaurantId: string;
+  amount: number;
+  type: PointsTransactionType;
+  balanceAfter: number;
+  createdAt: string;
+}
+
+export interface GamePlayer {
+  id: string;
+  alias: string;
+  position: number;
+  seatOrder: number;
+  isHost: boolean;
+}
+
+export interface GameSessionView {
+  id: string;
+  gameType: GameType;
+  mode: GameMode;
+  status: GameStatus;
+  tableId: string | null;
+  turnNumber: number;
+  currentTurnPlayerId: string | null;
+  winnerPlayerId: string | null;
+  maxPlayers: number;
+  startedAt: string | null;
+  endedAt: string | null;
+  lastTurnAt: string | null;
+  players: GamePlayer[];
+}
+
+export interface GameMoveResult {
+  id?: string;
+  diceRoll: number;
+  fromPosition: number;
+  toPosition: number;
+  movedByLadder: boolean;
+  movedBySnake: boolean;
+}
+
+
 

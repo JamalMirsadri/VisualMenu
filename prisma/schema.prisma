@@ -313,6 +313,12 @@ model Restaurant {
   videoJobs        VideoGenerationJob[]
   videoCreditLedger VideoCreditLedger[]
   videoCreditPurchases VideoCreditPurchase[]
+  gameConfig        GameConfig?
+  gameSessions      GameSession[]
+  pointsLedger      CustomerPointsLedger[]
+  rewards           Reward[]
+  rewardRedemptions RewardRedemption[]
+  loyaltyIdentities LoyaltyIdentity[]
 
   @@index([name])
   @@index([active])
@@ -512,6 +518,7 @@ model Table {
   restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   orders     Order[]
   qrCodes    QrCode[]
+  gameSessions GameSession[]
 
   @@unique([restaurantId, number])
   @@index([restaurantId])
@@ -628,6 +635,10 @@ model Customer {
   restaurant         Restaurant?             @relation(fields: [restaurantId], references: [id], onDelete: SetNull)
   fiscalProfiles     CustomerFiscalProfile[]
   orders             Order[]
+  gamePlayers        GamePlayer[]
+  pointsLedger       CustomerPointsLedger[]
+  rewardRedemptions  RewardRedemption[]
+  loyaltyIdentities  LoyaltyIdentity[]
 
   @@unique([restaurantId, taxId])
   @@index([restaurantId])
@@ -1443,4 +1454,229 @@ model VideoCreditPurchase {
   @@index([restaurantId])
   @@index([createdAt])
   @@map("video_credit_purchases")
+}
+
+// -----------------------------------------------------------------------------
+// RESTAURANT GAMES + LOYALTY (isolated feature)
+// -----------------------------------------------------------------------------
+
+enum GameType {
+  SNAKES_LADDERS
+}
+
+enum GameMode {
+  PRIVATE
+  RANDOM
+}
+
+enum GameStatus {
+  WAITING
+  IN_PROGRESS
+  FINISHED
+  CANCELLED
+}
+
+enum PointsTransactionType {
+  GAME_WIN
+  REWARD_REDEEM
+  ADMIN_ADJUST
+  EXPIRY
+  REFUND
+}
+
+enum RedemptionStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum LoyaltyIdentityStatus {
+  ACTIVE
+  REVOKED
+}
+
+model GameConfig {
+  id               String     @id @default(uuid()) @db.Uuid
+  restaurantId     String     @unique @map("restaurant_id") @db.Uuid
+  enabled          Boolean    @default(false)
+  modes            GameMode[] @default([])
+  minPlayers       Int        @default(2) @map("min_players")
+  maxPlayers       Int        @default(6) @map("max_players")
+  pointRules       Json?      @map("point_rules")
+  dailyPointsLimit Int        @default(0) @map("daily_points_limit")
+  turnTimeoutSeconds Int      @default(30) @map("turn_timeout_seconds")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("game_configs")
+}
+
+model GameSession {
+  id                  String     @id @default(uuid()) @db.Uuid
+  restaurantId        String     @map("restaurant_id") @db.Uuid
+  gameType            GameType   @default(SNAKES_LADDERS) @map("game_type")
+  mode                GameMode
+  tableId             String?    @map("table_id") @db.Uuid
+  status              GameStatus @default(WAITING)
+  hostPlayerId        String?    @map("host_player_id") @db.Uuid
+  currentTurnPlayerId String?    @map("current_turn_player_id") @db.Uuid
+  winnerPlayerId      String?    @map("winner_player_id") @db.Uuid
+  boardState          Json?      @map("board_state")
+  turnNumber          Int        @default(0) @map("turn_number")
+  eventVersion        Int        @default(0) @map("event_version")
+  maxPlayers          Int        @default(6) @map("max_players")
+  lastTurnAt          DateTime?  @map("last_turn_at")
+  startedAt           DateTime?  @map("started_at")
+  endedAt             DateTime?  @map("ended_at")
+  createdAt           DateTime   @default(now()) @map("created_at")
+  updatedAt           DateTime   @updatedAt @map("updated_at")
+
+  restaurant Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  table      Table?       @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  players    GamePlayer[]
+  moves      GameMove[]
+
+  @@index([restaurantId])
+  @@index([restaurantId, status])
+  @@index([tableId])
+  @@index([mode])
+  @@index([createdAt])
+  @@map("game_sessions")
+}
+
+model GamePlayer {
+  id            String   @id @default(uuid()) @db.Uuid
+  gameSessionId String   @map("game_session_id") @db.Uuid
+  customerId    String?  @map("customer_id") @db.Uuid
+  playerKey     String?  @map("player_key")
+  alias         String
+  position      Int      @default(1)
+  seatOrder     Int      @default(0) @map("seat_order")
+  isHost        Boolean  @default(false) @map("is_host")
+  joinedAt      DateTime @default(now()) @map("joined_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  customer    Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  moves       GameMove[]
+
+  @@unique([gameSessionId, seatOrder])
+  @@index([gameSessionId])
+  @@index([customerId])
+  @@index([playerKey])
+  @@map("game_players")
+}
+
+model GameMove {
+  id            String   @id @default(uuid()) @db.Uuid
+  gameSessionId String   @map("game_session_id") @db.Uuid
+  gamePlayerId  String   @map("game_player_id") @db.Uuid
+  turnNumber    Int      @map("turn_number")
+  diceRoll      Int      @map("dice_roll")
+  fromPosition  Int      @map("from_position")
+  toPosition    Int      @map("to_position")
+  movedByLadder Boolean  @default(false) @map("moved_by_ladder")
+  movedBySnake  Boolean  @default(false) @map("moved_by_snake")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  gamePlayer  GamePlayer  @relation(fields: [gamePlayerId], references: [id], onDelete: Cascade)
+
+  @@index([gameSessionId])
+  @@unique([gameSessionId, turnNumber])
+  @@index([gamePlayerId])
+  @@map("game_moves")
+}
+
+model CustomerPointsLedger {
+  id             String               @id @default(uuid()) @db.Uuid
+  customerId     String               @map("customer_id") @db.Uuid
+  restaurantId   String               @map("restaurant_id") @db.Uuid
+  amount         Int
+  type           PointsTransactionType
+  referenceType  String?              @map("reference_type")
+  referenceId    String?              @map("reference_id") @db.Uuid
+  idempotencyKey String?              @unique @map("idempotency_key")
+  balanceAfter   Int                  @map("balance_after")
+  metadata       Json?
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([restaurantId])
+  @@index([customerId, createdAt])
+  @@index([type])
+  @@map("customer_points_ledger")
+}
+
+model Reward {
+  id             String   @id @default(uuid()) @db.Uuid
+  restaurantId   String   @map("restaurant_id") @db.Uuid
+  name           String
+  description    String?  @db.Text
+  pointsCost     Int      @map("points_cost")
+  active         Boolean  @default(true)
+  unlimitedStock Boolean  @default(true) @map("unlimited_stock")
+  stock          Int?
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  restaurant  Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  redemptions RewardRedemption[]
+
+  @@index([restaurantId])
+  @@index([restaurantId, active])
+  @@map("rewards")
+}
+
+model RewardRedemption {
+  id             String           @id @default(uuid()) @db.Uuid
+  customerId     String           @map("customer_id") @db.Uuid
+  restaurantId   String           @map("restaurant_id") @db.Uuid
+  rewardId       String           @map("reward_id") @db.Uuid
+  pointsSpent    Int              @map("points_spent")
+  status         RedemptionStatus @default(PENDING)
+  idempotencyKey String?          @unique @map("idempotency_key")
+  metadata       Json?
+  redeemedAt     DateTime?        @map("redeemed_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  reward     Reward     @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@index([restaurantId])
+  @@index([rewardId])
+  @@index([status])
+  @@map("reward_redemptions")
+}
+
+model LoyaltyIdentity {
+  id           String                @id @default(uuid()) @db.Uuid
+  restaurantId String                @map("restaurant_id") @db.Uuid
+  customerId   String                @map("customer_id") @db.Uuid
+  tokenHash    String                @unique @map("token_hash")
+  status       LoyaltyIdentityStatus @default(ACTIVE)
+  issuedAt     DateTime              @default(now()) @map("issued_at")
+  revokedAt    DateTime?             @map("revoked_at")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, customerId])
+  @@index([customerId])
+  @@index([restaurantId])
+  @@index([status])
+  @@map("loyalty_identities")
 }

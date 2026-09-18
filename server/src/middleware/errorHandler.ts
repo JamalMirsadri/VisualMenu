@@ -57,8 +57,17 @@ export function errorHandler(
   }
 
   const statusCode = err.statusCode || 500;
-  const message = err.message || 'An unexpected internal server error occurred.';
-  const errorCode = err.errorCode || 'INTERNAL_SERVER_ERROR';
+  const isServerError = statusCode >= 500;
+
+  // Never leak internal messages (SQL errors, stack traces, secrets, internal
+  // IDs) to customers on unexpected server errors. Expected client errors (4xx)
+  // carry an intentional, safe message set by the throwing service.
+  const message = isServerError
+    ? 'An unexpected internal server error occurred.'
+    : err.message || 'An unexpected error occurred.';
+  const errorCode = isServerError
+    ? 'INTERNAL_SERVER_ERROR'
+    : err.errorCode || 'BAD_REQUEST';
 
   res.status(statusCode).json({
     success: false,

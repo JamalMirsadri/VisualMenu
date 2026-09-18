@@ -48,6 +48,8 @@ import { AdminQrPrintPage } from './pages/admin/AdminQrPrintPage';
 import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
 import { AdminAiInsightsPage } from './pages/admin/AdminAiInsightsPage';
 import { AdminAiVideoPage } from './pages/admin/AdminAiVideoPage';
+import { AdminGamesPage } from './pages/admin/AdminGamesPage';
+import { AdminLoyaltyPage } from './pages/admin/AdminLoyaltyPage';
 import { PermissionRoute } from './components/common/PermissionRoute';
 import { FeatureGate } from './components/admin/FeatureGate';
 
@@ -114,6 +116,8 @@ export const App: React.FC = () => {
             <Route path="analytics" element={<FeatureGate feature="ADVANCED_ANALYTICS"><AdminAnalyticsPage /></FeatureGate>} />
             <Route path="ai-insights" element={<FeatureGate feature="AI_INSIGHTS"><AdminAiInsightsPage /></FeatureGate>} />
             <Route path="ai-video" element={<FeatureGate feature="AI_FOOD_VIDEO"><AdminAiVideoPage /></FeatureGate>} />
+            <Route path="games" element={<PermissionRoute permission="MANAGE_RESTAURANT_SETTINGS"><FeatureGate feature="GAMES_LOYALTY"><AdminGamesPage /></FeatureGate></PermissionRoute>} />
+            <Route path="loyalty" element={<PermissionRoute permission="MANAGE_RESTAURANT_SETTINGS"><FeatureGate feature="GAMES_LOYALTY"><AdminLoyaltyPage /></FeatureGate></PermissionRoute>} />
           </Route>
 
           {/* Platform SaaS Management Panel */}

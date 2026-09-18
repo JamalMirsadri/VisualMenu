@@ -128,6 +128,13 @@ class RealtimeService {
   }
 
   /**
+   * Sends a single event to a single SSE client (used for connection snapshots).
+   */
+  public send(res: Response, event: string, data: any): void {
+    this.sendToClient(res, event, data);
+  }
+
+  /**
    * Broadcasts an event to a specific restaurant tenant
    */
   public broadcastToRestaurant(restaurantId: string, eventName: RealtimeEventName | string, data: any): void {
