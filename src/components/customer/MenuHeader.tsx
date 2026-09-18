@@ -148,7 +148,7 @@ export const MenuHeader: React.FC<MenuHeaderProps> = ({ restaurant }) => {
 
       {/* Restaurant Info Dialog */}
       {showInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md pointer-events-auto">
           <div className="relative w-full max-w-md bg-zinc-950 border border-amber-500/30 rounded-2xl p-6 text-zinc-100 shadow-2xl">
             <button
               onClick={() => setShowInfo(false)}
