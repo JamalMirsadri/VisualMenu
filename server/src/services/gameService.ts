@@ -207,17 +207,31 @@ export class GameService {
     const linkedCustomerId = await this.resolveLinkedCustomerId(restaurantId, customerId);
 
     const result = await prisma.$transaction(async (tx) => {
-      // Reuse a waiting random session with open seats.
-      const waiting = await tx.gameSession.findFirst({
+      // Reuse a waiting random session with open seats (candidate read).
+      const candidate = await tx.gameSession.findFirst({
         where: { restaurantId, mode: GameMode.RANDOM, status: GameStatus.WAITING },
         orderBy: { createdAt: 'asc' },
         include: { players: true },
       });
 
-      let session;
-      if (waiting && waiting.players.length < waiting.maxPlayers) {
-        session = waiting;
-      } else {
+      let session: any = candidate ?? null;
+
+      if (session) {
+        // Lock the session row so concurrent joins cannot both reuse (and
+        // potentially both auto-start) the same lobby, then re-read its live state.
+        await tx.$queryRaw`SELECT "id" FROM "game_sessions" WHERE "id" = ${session.id}::uuid FOR UPDATE`;
+        const live = await tx.gameSession.findUnique({
+          where: { id: session.id },
+          include: { players: true },
+        });
+        if (!live || live.status !== GameStatus.WAITING || live.players.length >= live.maxPlayers) {
+          session = null;
+        } else {
+          session = live;
+        }
+      }
+
+      if (!session) {
         session = await tx.gameSession.create({
           data: {
             restaurantId,
@@ -247,10 +261,11 @@ export class GameService {
         await tx.gameSession.update({ where: { id: session.id }, data: { hostPlayerId: player.id } });
       }
 
-      // Auto-start a random session when it reaches its maximum size.
+      // Auto-start a random session as soon as it reaches the minimum players
+      // (never wait for maxPlayers).
       let started = false;
-      const players = [...(session.players ?? []).map((p) => p.id), player.id];
-      if (players.length >= config.maxPlayers) {
+      const playerCount = (session.players?.length ?? 0) + 1;
+      if (playerCount >= config.minPlayers) {
         const firstPlayer = await tx.gamePlayer.findFirst({ where: { gameSessionId: session.id }, orderBy: { seatOrder: 'asc' } });
         await tx.gameSession.update({
           where: { id: session.id },

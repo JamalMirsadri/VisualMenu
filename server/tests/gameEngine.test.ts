@@ -7,7 +7,7 @@ import { RestaurantDeletionService } from '../src/services/restaurantDeletionSer
 import { GameService } from '../src/services/gameService';
 import { applyMovement, rollDice, BOARD_SIZE } from '../src/constants/game';
 
-async function setupRestaurant(unique: string, idx: number) {
+async function setupRestaurant(unique: string, idx: number, overrides: { minPlayers?: number; maxPlayers?: number } = {}) {
   const plan = await prisma.subscriptionPlan.create({
     data: { code: `GAME-${idx}-${unique}`, name: `Game Plan ${idx}`, price: 10, features: ['GAMES_LOYALTY'], active: true },
   });
@@ -32,8 +32,8 @@ async function setupRestaurant(unique: string, idx: number) {
       restaurantId: restaurant.id,
       enabled: true,
       modes: [GameMode.PRIVATE, GameMode.RANDOM],
-      minPlayers: 2,
-      maxPlayers: 6,
+      minPlayers: overrides.minPlayers ?? 2,
+      maxPlayers: overrides.maxPlayers ?? 6,
       turnTimeoutSeconds: 60,
     },
   });
@@ -58,7 +58,7 @@ async function runTests() {
   };
 
   const unique = Date.now().toString(36);
-  let A: any, B: any;
+  let A: any, B: any, C: any, D: any, E: any;
   const planIds: string[] = [];
   const restaurantIds: string[] = [];
 
@@ -98,8 +98,11 @@ async function runTests() {
     // -------------------------------------------------------------------------
     A = await setupRestaurant(unique, 1);
     B = await setupRestaurant(unique, 2);
-    planIds.push(A.plan.id, B.plan.id);
-    restaurantIds.push(A.restaurant.id, B.restaurant.id);
+    C = await setupRestaurant(unique, 3, { minPlayers: 3 });
+    D = await setupRestaurant(unique, 4, { maxPlayers: 2 });
+    E = await setupRestaurant(unique, 5, { maxPlayers: 2 });
+    planIds.push(A.plan.id, B.plan.id, C.plan.id, D.plan.id, E.plan.id);
+    restaurantIds.push(A.restaurant.id, B.restaurant.id, C.restaurant.id, D.restaurant.id, E.restaurant.id);
 
     // -------------------------------------------------------------------------
     // PRIVATE lifecycle
@@ -338,6 +341,68 @@ async function runTests() {
       if (res.status !== 400 || res.body.errorCode !== 'INVALID_CUSTOMER_ID') {
         throw new Error(`expected 400 INVALID_CUSTOMER_ID, got ${res.status}: ${JSON.stringify(res.body)}`);
       }
+    });
+
+    // -------------------------------------------------------------------------
+    // RANDOM auto-start regression
+    // -------------------------------------------------------------------------
+    await assert(28, 'RANDOM auto-starts at minPlayers (2)', async () => {
+      const p1 = await request(app).post(`/api/restaurants/${A.restaurant.id}/games/random`).send({ alias: 'M2a', playerKey: `m2a-${unique}` });
+      const p2 = await request(app).post(`/api/restaurants/${A.restaurant.id}/games/random`).send({ alias: 'M2b', playerKey: `m2b-${unique}` });
+      if (p1.status !== 201 || p2.status !== 201) throw new Error(`join failed ${p1.status}/${p2.status}`);
+      if (p1.body.data.session.id !== p2.body.data.session.id) throw new Error('players not matched into the same session');
+      if (p1.body.data.started !== false) throw new Error(`first join should not start: ${JSON.stringify(p1.body.data.started)}`);
+      if (p2.body.data.started !== true) throw new Error(`second join should auto-start: ${JSON.stringify(p2.body.data.started)}`);
+      if (p2.body.data.session.status !== 'IN_PROGRESS') throw new Error(`expected IN_PROGRESS, got ${p2.body.data.session.status}`);
+    });
+
+    await assert(29, 'RANDOM with minPlayers=3 keeps 2 players WAITING', async () => {
+      const p1 = await request(app).post(`/api/restaurants/${C.restaurant.id}/games/random`).send({ alias: 'M3a', playerKey: `m3a-${unique}` });
+      const p2 = await request(app).post(`/api/restaurants/${C.restaurant.id}/games/random`).send({ alias: 'M3b', playerKey: `m3b-${unique}` });
+      if (p1.status !== 201 || p2.status !== 201) throw new Error(`join failed ${p1.status}/${p2.status}`);
+      if (p2.body.data.started !== false) throw new Error('should not auto-start below minPlayers');
+      if (p2.body.data.session.status !== 'WAITING') throw new Error(`expected WAITING, got ${p2.body.data.session.status}`);
+    });
+
+    await assert(30, 'RANDOM never exceeds maxPlayers', async () => {
+      const p1 = await request(app).post(`/api/restaurants/${D.restaurant.id}/games/random`).send({ alias: 'Max1', playerKey: `max1-${unique}` });
+      const p2 = await request(app).post(`/api/restaurants/${D.restaurant.id}/games/random`).send({ alias: 'Max2', playerKey: `max2-${unique}` });
+      const p3 = await request(app).post(`/api/restaurants/${D.restaurant.id}/games/random`).send({ alias: 'Max3', playerKey: `max3-${unique}` });
+      if (p1.status !== 201 || p2.status !== 201 || p3.status !== 201) throw new Error(`join failed ${p1.status}/${p2.status}/${p3.status}`);
+      if (p1.body.data.session.id !== p2.body.data.session.id) throw new Error('players 1&2 not matched');
+      if (p3.body.data.session.id === p1.body.data.session.id) throw new Error('3rd player overflowed into a started/full session');
+      const count = await prisma.gamePlayer.count({ where: { gameSessionId: p1.body.data.session.id } });
+      if (count !== 2) throw new Error(`expected exactly 2 players, got ${count}`);
+    });
+
+    await assert(31, 'Concurrent RANDOM joins never overfill or double-start', async () => {
+      const results = await Promise.allSettled([
+        request(app).post(`/api/restaurants/${E.restaurant.id}/games/random`).send({ alias: 'CC1', playerKey: `cc1-${unique}` }),
+        request(app).post(`/api/restaurants/${E.restaurant.id}/games/random`).send({ alias: 'CC2', playerKey: `cc2-${unique}` }),
+        request(app).post(`/api/restaurants/${E.restaurant.id}/games/random`).send({ alias: 'CC3', playerKey: `cc3-${unique}` }),
+      ]);
+      const sessionIds = results
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+        .map((r) => r.value.body?.data?.session?.id)
+        .filter(Boolean);
+      if (sessionIds.length !== 3) throw new Error(`expected 3 successful joins, got ${sessionIds.length}`);
+      const distinct = [...new Set(sessionIds)];
+      let total = 0;
+      for (const sid of distinct) {
+        const players = await prisma.gamePlayer.count({ where: { gameSessionId: sid } });
+        total += players;
+        if (players > 2) throw new Error(`session ${sid} exceeded maxPlayers: ${players}`);
+      }
+      if (total !== 3) throw new Error(`expected 3 total players, got ${total}`);
+    });
+
+    await assert(32, 'PRIVATE mode is unchanged (host manual start)', async () => {
+      const host = await request(app).post(`/api/restaurants/${A.restaurant.id}/games/private`).send({ tableId: A.tableA.id, alias: 'PrivHost', playerKey: `privh-${unique}` });
+      await request(app).post(`/api/restaurants/${A.restaurant.id}/games/${host.body.data.session.id}/join`).send({ tableId: A.tableA.id, alias: 'PrivJoin', playerKey: `privj-${unique}` });
+      const state = await prisma.gameSession.findUnique({ where: { id: host.body.data.session.id } });
+      if (state?.status !== 'WAITING') throw new Error(`private session should stay WAITING, got ${state?.status}`);
+      const started = await request(app).post(`/api/restaurants/${A.restaurant.id}/games/${host.body.data.session.id}/start`).set('Authorization', `Bearer ${host.body.data.token}`);
+      if (started.status !== 200 || started.body.data.game.status !== 'IN_PROGRESS') throw new Error(`manual start failed: ${started.status}`);
     });
   } catch (err: any) {
     console.error('  Setup error:', err.message || err);
