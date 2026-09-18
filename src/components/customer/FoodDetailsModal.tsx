@@ -22,7 +22,7 @@ export const FoodDetailsModal: React.FC<FoodDetailsModalProps> = ({
   onClose,
   contained = false,
 }) => {
-  const { addItem, openCart } = useCart();
+  const { addItem } = useCart();
   const [quantity, setQuantity] = useState<number>(1);
   const [itemNote, setItemNote] = useState<string>('');
   const [addedToast, setAddedToast] = useState<boolean>(false);
@@ -39,7 +39,6 @@ export const FoodDetailsModal: React.FC<FoodDetailsModalProps> = ({
     setTimeout(() => {
       setAddedToast(false);
       onClose();
-      openCart();
     }, 600);
   };
 
