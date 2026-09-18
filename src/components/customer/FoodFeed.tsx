@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -57,8 +57,21 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
     categoryMap.current = new Map(categories.map((c) => [c.id, c]));
   }, [categories]);
 
+  // Normalize the flattened product list into category-then-product order. The
+  // backend may return foods sorted by a global `displayOrder` that interleaves
+  // categories; grouping here guarantees "all products of category A, then B".
+  const orderedFoods = useMemo(() => {
+    const categoryIndex = new Map(categories.map((c, i) => [c.id, i]));
+    return [...foods].sort((a, b) => {
+      const ai = categoryIndex.get(a.categoryId) ?? Number.MAX_SAFE_INTEGER;
+      const bi = categoryIndex.get(b.categoryId) ?? Number.MAX_SAFE_INTEGER;
+      if (ai !== bi) return ai - bi;
+      return (a.order ?? 0) - (b.order ?? 0);
+    });
+  }, [foods, categories]);
+
   // Current active food item
-  const currentFood = foods[activeIndex] || foods[0];
+  const currentFood = orderedFoods[activeIndex] || orderedFoods[0];
   const activeCategoryId = currentFood?.categoryId;
   const currentCategory = currentFood ? categoryMap.current.get(currentFood.categoryId) : undefined;
   const currentFoodImage = resolveMediaUrl(currentFood?.image);
@@ -102,30 +115,41 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
     return () => {
       observer.disconnect();
     };
-  }, [foods]);
+  }, [orderedFoods]);
 
   // Scroll to index utility respecting reduced motion
   const scrollToIndex = useCallback((index: number, behavior: 'auto' | 'smooth' = 'smooth') => {
     const container = containerRef.current;
     if (!container) return;
     const slides = container.querySelectorAll<HTMLElement>('.snap-feed-item');
-    if (slides[index]) {
-      isScrollingRef.current = true;
-      const prefersReducedMotion =
-        typeof window !== 'undefined' &&
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const slide = slides[index];
+    if (!slide) return;
 
-      const resolvedBehavior = prefersReducedMotion ? 'auto' : behavior;
+    isScrollingRef.current = true;
 
-      slides[index].scrollIntoView({
-        behavior: resolvedBehavior,
-        block: 'start',
-      });
-      setActiveIndex(index);
-      setTimeout(() => {
-        isScrollingRef.current = false;
-      }, resolvedBehavior === 'auto' ? 50 : 500);
+    const prefersReducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const instant = behavior === 'auto' || prefersReducedMotion;
+
+    if (instant) {
+      // The container has CSS `scroll-behavior: smooth`, which makes
+      // `scrollIntoView({ behavior: 'auto' })` animate anyway. Temporarily
+      // override it so category jumps land instantly without replaying
+      // intermediate products.
+      const prevScrollBehavior = container.style.scrollBehavior;
+      container.style.scrollBehavior = 'auto';
+      slide.scrollIntoView({ behavior: 'auto', block: 'start' });
+      container.style.scrollBehavior = prevScrollBehavior;
+    } else {
+      slide.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+
+    setActiveIndex(index);
+    setTimeout(() => {
+      isScrollingRef.current = false;
+    }, instant ? 50 : 500);
   }, []);
 
   // Keyboard navigation for desktop (ArrowUp / ArrowDown / PageUp / PageDown / j / k)
@@ -135,7 +159,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
 
       if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === 'j') {
         e.preventDefault();
-        if (activeIndex < foods.length - 1) {
+        if (activeIndex < orderedFoods.length - 1) {
           scrollToIndex(activeIndex + 1);
         }
       } else if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'k') {
@@ -148,17 +172,17 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeIndex, foods.length, scrollToIndex, selectedFoodForDetails]);
+  }, [activeIndex, orderedFoods.length, scrollToIndex, selectedFoodForDetails]);
 
   // Jump to Category
   const handleSelectCategory = (categoryId: string) => {
-    const targetIndex = foods.findIndex((f) => f.categoryId === categoryId);
+    const targetIndex = orderedFoods.findIndex((f) => f.categoryId === categoryId);
     if (targetIndex !== -1) {
       scrollToIndex(targetIndex, 'auto');
     }
   };
 
-  if (!foods || foods.length === 0) {
+  if (!orderedFoods || orderedFoods.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[100svh] w-full bg-zinc-950 text-zinc-300 p-6 text-center">
         <h2 className="font-serif-luxury text-2xl text-amber-400 font-bold mb-2">No Menu Items Available</h2>
@@ -228,7 +252,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
               <div className="space-y-1 max-h-56 overflow-y-auto no-scrollbar">
                 {categories.map((cat) => {
                   const isSelected = cat.id === activeCategoryId;
-                  const count = foods.filter((f) => f.categoryId === cat.id).length;
+                  const count = orderedFoods.filter((f) => f.categoryId === cat.id).length;
                   return (
                     <button
                       key={cat.id}
@@ -305,7 +329,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
           ref={containerRef}
           className="w-full h-full snap-feed-container no-scrollbar"
         >
-          {foods.map((food, index) => {
+          {orderedFoods.map((food, index) => {
             const isSlideActive = index === activeIndex;
             const shouldPreload = Math.abs(index - activeIndex) <= 1;
             const presentationMode = restaurant.settings?.presentationMode || 'INDIVIDUAL_VIDEO';
@@ -332,7 +356,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
         {/* Progress Counter (e.g. 03 / 14) */}
         <ProgressIndicator
           currentIndex={activeIndex}
-          total={foods.length}
+          total={orderedFoods.length}
         />
 
         {/* Desktop Quick Up/Down Navigation Buttons */}
@@ -351,11 +375,11 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
               <ChevronUp className="w-5 h-5 text-amber-400" />
             </button>
             <button
-              onClick={() => activeIndex < foods.length - 1 && scrollToIndex(activeIndex + 1)}
-              disabled={activeIndex === foods.length - 1}
+              onClick={() => activeIndex < orderedFoods.length - 1 && scrollToIndex(activeIndex + 1)}
+              disabled={activeIndex === orderedFoods.length - 1}
               aria-label="Next item"
               className={`p-2.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 transition-all ${
-                activeIndex === foods.length - 1
+                activeIndex === orderedFoods.length - 1
                   ? 'opacity-30 cursor-not-allowed'
                   : 'hover:bg-black/90 hover:scale-110 active:scale-95 text-white cursor-pointer'
               }`}
