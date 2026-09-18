@@ -81,6 +81,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
 
     const observer = new IntersectionObserver(
       (entries) => {
+        if (isScrollingRef.current) return;
         entries.forEach((entry) => {
           if (entry.isIntersecting && entry.intersectionRatio >= 0.55) {
             const index = Array.from(slides).indexOf(entry.target as HTMLElement);
@@ -104,7 +105,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
   }, [foods]);
 
   // Scroll to index utility respecting reduced motion
-  const scrollToIndex = useCallback((index: number) => {
+  const scrollToIndex = useCallback((index: number, behavior: 'auto' | 'smooth' = 'smooth') => {
     const container = containerRef.current;
     if (!container) return;
     const slides = container.querySelectorAll<HTMLElement>('.snap-feed-item');
@@ -114,14 +115,16 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
         typeof window !== 'undefined' &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+      const resolvedBehavior = prefersReducedMotion ? 'auto' : behavior;
+
       slides[index].scrollIntoView({
-        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        behavior: resolvedBehavior,
         block: 'start',
       });
       setActiveIndex(index);
       setTimeout(() => {
         isScrollingRef.current = false;
-      }, prefersReducedMotion ? 50 : 500);
+      }, resolvedBehavior === 'auto' ? 50 : 500);
     }
   }, []);
 
@@ -151,7 +154,7 @@ export const FoodFeed: React.FC<FoodFeedProps> = ({
   const handleSelectCategory = (categoryId: string) => {
     const targetIndex = foods.findIndex((f) => f.categoryId === categoryId);
     if (targetIndex !== -1) {
-      scrollToIndex(targetIndex);
+      scrollToIndex(targetIndex, 'auto');
     }
   };
 
