@@ -13,6 +13,8 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
+  Gamepad2,
   Receipt,
   CreditCard,
   Banknote,
@@ -22,6 +24,8 @@ import {
 } from 'lucide-react';
 import { orderService } from '../../services/orderService';
 import { paymentService } from '../../services/paymentService';
+import { customerGameService, type GameConfigDto } from '../../services/customerGameService';
+import { CustomerGameLobby } from '../../components/customer/CustomerGameLobby';
 import type { Order, OrderStatus, OrderItemStatus, FiscalDocument } from '../../types';
 
 interface StatusStep {
@@ -134,6 +138,8 @@ export const CustomerOrderTrackingPage: React.FC = () => {
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<FiscalDocument | null>(null);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
+  const [gameConfig, setGameConfig] = useState<GameConfigDto | null>(null);
+  const [showGameLobby, setShowGameLobby] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectAttemptsRef = useRef(0);
@@ -168,6 +174,23 @@ export const CustomerOrderTrackingPage: React.FC = () => {
       setLoading(false);
     }
   }, [publicOrderToken]);
+
+  // Fetch game availability for "Play While You Wait" (restaurant-scoped).
+  useEffect(() => {
+    if (!order?.restaurantId) return;
+    let cancelled = false;
+    customerGameService
+      .getConfig(order.restaurantId)
+      .then((cfg) => {
+        if (!cancelled) setGameConfig(cfg.enabled ? cfg : null);
+      })
+      .catch(() => {
+        if (!cancelled) setGameConfig(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [order?.restaurantId]);
 
   // Initial fetch on mount
   useEffect(() => {
@@ -512,6 +535,33 @@ export const CustomerOrderTrackingPage: React.FC = () => {
             </motion.div>
           </AnimatePresence>
         </div>
+
+        {/* Play While You Wait (moved from menu header) */}
+        {gameConfig?.enabled && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+          >
+            <button
+              onClick={() => setShowGameLobby(true)}
+              className="w-full p-5 rounded-3xl bg-zinc-900/60 border border-zinc-800/80 shadow-xl flex items-center justify-between gap-3 hover:border-amber-500/40 transition text-left"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-400/30 flex items-center justify-center text-amber-400 shrink-0">
+                  <Gamepad2 className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-white">Play While You Wait</h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Pass the time with a quick game at your table.
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-zinc-500 shrink-0" />
+            </button>
+          </motion.div>
+        )}
 
         {/* Cancellation Notice if Cancelled */}
         {isCancelled && (
@@ -891,6 +941,16 @@ export const CustomerOrderTrackingPage: React.FC = () => {
           )}
         </AnimatePresence>
       </main>
+
+      {/* Play While You Wait Lobby */}
+      {showGameLobby && gameConfig && order.restaurant && (
+        <CustomerGameLobby
+          restaurant={order.restaurant}
+          table={order.table ? { id: order.table.id, number: order.table.number, name: order.table.name } : null}
+          config={gameConfig}
+          onClose={() => setShowGameLobby(false)}
+        />
+      )}
     </div>
   );
 };

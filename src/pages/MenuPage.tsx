@@ -123,7 +123,6 @@ const MenuPageContent: React.FC = () => {
         foods={foods}
         favorites={favorites}
         onToggleFavorite={toggleFavorite}
-        table={table}
       />
 
       {/* Floating Bottom Cart Bar (Appears when items are in cart) */}
