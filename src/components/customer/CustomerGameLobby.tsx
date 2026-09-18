@@ -253,7 +253,7 @@ export const CustomerGameLobby: React.FC<CustomerGameLobbyProps> = ({ restaurant
   const canStart = isWaiting && isHost && (session?.players.length ?? 0) >= config.minPlayers;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center pointer-events-auto">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
 
       <motion.div
