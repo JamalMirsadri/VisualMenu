@@ -67,6 +67,7 @@ interface CustomerGameBoardProps {
   ladders: BoardConnection[];
   snakes: BoardConnection[];
   onExit: () => void;
+  onLeave?: () => void;
 }
 
 export const CustomerGameBoard: React.FC<CustomerGameBoardProps> = ({
@@ -77,6 +78,7 @@ export const CustomerGameBoard: React.FC<CustomerGameBoardProps> = ({
   ladders,
   snakes,
   onExit,
+  onLeave,
 }) => {
   const reducedMotion = useReducedMotion();
   const [session, setSession] = useState<GameSessionDto>(initialSession);
@@ -394,6 +396,18 @@ export const CustomerGameBoard: React.FC<CustomerGameBoardProps> = ({
             className="px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-neutral-950 font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {rolling ? 'Rolling…' : isMyTurn ? 'Roll Dice' : 'Waiting…'}
+          </button>
+        </div>
+      )}
+
+      {/* Leave game (release this player without ending the match) */}
+      {!finished && !cancelled && onLeave && (
+        <div className="flex justify-center">
+          <button
+            onClick={onLeave}
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-500 hover:text-red-400 transition-colors"
+          >
+            Leave Game
           </button>
         </div>
       )}

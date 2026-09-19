@@ -8,6 +8,8 @@ import { isValidUuid } from '../middleware/validation';
 import { LoyaltyService } from './loyaltyService';
 
 const TOKEN_TTL_SECONDS = 2 * 60 * 60; // 2 hours
+const DEFAULT_WAITING_LOBBY_TIMEOUT_SECONDS = 600;
+const DEFAULT_INACTIVITY_TIMEOUT_SECONDS = 900;
 
 export interface GamePlayerTokenPayload {
   sub: string; // GamePlayer.id
@@ -301,6 +303,10 @@ export class GameService {
   // ---------------------------------------------------------------------------
   static async getGame(restaurantId: string, gameSessionId: string, playerId: string) {
     const { session } = await this.assertActivePlayer(restaurantId, gameSessionId, playerId);
+    if (session.status !== GameStatus.WAITING && session.status !== GameStatus.IN_PROGRESS) {
+      throw gameError(409, 'GAME_ENDED', 'This game has already ended.');
+    }
+    await this.assertSessionNotExpired(session);
     return this.sanitizeSession(session);
   }
 
@@ -447,42 +453,26 @@ export class GameService {
   }
 
   static async leave(restaurantId: string, gameSessionId: string, playerId: string) {
-    const result = await prisma.$transaction(async (tx) => {
-      const session = await tx.gameSession.findUnique({ where: { id: gameSessionId }, include: { players: { orderBy: { seatOrder: 'asc' } } } });
-      if (!session || session.restaurantId !== restaurantId) throw gameError(404, 'GAME_NOT_FOUND', 'Game session not found.');
-
-      const player = session.players.find((p) => p.id === playerId);
-      if (!player) throw gameError(403, 'NOT_IN_GAME', 'You are not a player in this game.');
-
-      if (session.status !== GameStatus.WAITING) {
-        throw gameError(409, 'GAME_NOT_LEAVABLE', 'Only waiting lobbies can be left.');
-      }
-
-      const remaining = session.players.filter((p) => p.id !== playerId);
-      if (remaining.length === 0) {
-        const cancelled = await tx.gameSession.update({
-          where: { id: session.id },
-          data: { status: GameStatus.CANCELLED, endedAt: new Date(), eventVersion: { increment: 1 } },
-          include: { players: { orderBy: { seatOrder: 'asc' } } },
-        });
-        return { cancelled: true, session: this.sanitizeSession(cancelled) };
-      }
-
-      await tx.gamePlayer.delete({ where: { id: playerId } });
-
-      if (session.hostPlayerId === playerId) {
-        await tx.gameSession.update({ where: { id: session.id }, data: { hostPlayerId: remaining[0].id, eventVersion: { increment: 1 } } });
-      } else {
-        await tx.gameSession.update({ where: { id: session.id }, data: { eventVersion: { increment: 1 } } });
-      }
-
-      const updated = await tx.gameSession.findUnique({ where: { id: session.id }, include: { players: { orderBy: { seatOrder: 'asc' } } } });
-      return { cancelled: false, session: this.sanitizeSession(updated) };
+    const existing = await prisma.gameSession.findUnique({
+      where: { id: gameSessionId },
+      include: { players: { orderBy: { seatOrder: 'asc' } } },
     });
+    if (!existing || existing.restaurantId !== restaurantId) throw gameError(404, 'GAME_NOT_FOUND', 'Game session not found.');
+
+    const player = existing.players.find((p) => p.id === playerId);
+    if (!player) throw gameError(403, 'NOT_IN_GAME', 'You are not a player in this game.');
+
+    if (existing.status === GameStatus.FINISHED || existing.status === GameStatus.CANCELLED) {
+      throw gameError(409, 'GAME_ENDED', 'This game has already ended.');
+    }
+
+    const result = await this.removePlayerFromSession(gameSessionId, playerId);
 
     if (result.cancelled) {
-      this.emitGameCancelled(result.session);
-      this.emitTableLobby(result.session, 'GAME_CANCELLED');
+      if (result.session) {
+        this.emitGameCancelled(result.session);
+        this.emitTableLobby(result.session, 'GAME_CANCELLED');
+      }
       return null;
     }
 
@@ -490,7 +480,7 @@ export class GameService {
       gameSessionId,
       version: result.session.eventVersion,
       playerId,
-      alias: result.session.players.find((p: any) => p.id === playerId)?.alias ?? null,
+      alias: player.alias,
     });
     this.emitTableLobby(result.session, 'PLAYER_LEFT');
     return result.session;
@@ -604,11 +594,106 @@ export class GameService {
         playerKey,
         gameSession: { status: { in: [GameStatus.WAITING, GameStatus.IN_PROGRESS] } },
       },
-      select: { id: true },
+      include: { gameSession: true },
     });
-    if (existing) {
-      throw gameError(409, 'ALREADY_IN_GAME', 'This player is already in an active game or queue.');
+    if (!existing) return;
+
+    const waitingTimeout = DEFAULT_WAITING_LOBBY_TIMEOUT_SECONDS * 1000;
+    const inactivityTimeout = DEFAULT_INACTIVITY_TIMEOUT_SECONDS * 1000;
+
+    // A waiting lobby that outlived its TTL is stale: cancel it so all queued
+    // players are released (server timestamps only, never client time).
+    if (existing.gameSession.status === GameStatus.WAITING) {
+      if (existing.gameSession.createdAt.getTime() < Date.now() - waitingTimeout) {
+        const cancelled = await prisma.gameSession.update({
+          where: { id: existing.gameSession.id },
+          data: { status: GameStatus.CANCELLED, endedAt: new Date(), eventVersion: { increment: 1 } },
+        });
+        broadcastGameEvent(cancelled.id, 'GAME_CANCELLED', {
+          gameSessionId: cancelled.id,
+          version: cancelled.eventVersion,
+        });
+        return;
+      }
     }
+
+    // An in-progress player that has been inactive past its TTL is released on
+    // their own; the match keeps running for everyone else.
+    if (existing.gameSession.status === GameStatus.IN_PROGRESS) {
+      const lastActive = existing.updatedAt ?? existing.joinedAt ?? existing.createdAt;
+      if (lastActive.getTime() < Date.now() - inactivityTimeout) {
+        const result = await this.removePlayerFromSession(existing.gameSession.id, existing.id);
+        if (result.session) {
+          broadcastGameEvent(existing.gameSession.id, 'PLAYER_LEFT', {
+            gameSessionId: existing.gameSession.id,
+            version: result.session.eventVersion,
+            playerId: existing.id,
+            alias: existing.alias,
+          });
+        }
+        return;
+      }
+    }
+
+    throw gameError(409, 'ALREADY_IN_GAME', 'This player is already in an active game or queue.');
+  }
+
+  private static async assertSessionNotExpired(session: any) {
+    if (session.status === GameStatus.WAITING) {
+      const timeout = DEFAULT_WAITING_LOBBY_TIMEOUT_SECONDS * 1000;
+      if (session.createdAt.getTime() < Date.now() - timeout) {
+        throw gameError(409, 'GAME_EXPIRED', 'This game lobby has expired.');
+      }
+    } else if (session.status === GameStatus.IN_PROGRESS) {
+      const timeout = DEFAULT_INACTIVITY_TIMEOUT_SECONDS * 1000;
+      const lastActivity = session.lastTurnAt ?? session.startedAt ?? session.createdAt;
+      if (lastActivity.getTime() < Date.now() - timeout) {
+        throw gameError(409, 'GAME_EXPIRED', 'This game has expired due to inactivity.');
+      }
+    }
+  }
+
+  /**
+   * Removes a single player from a WAITING or IN_PROGRESS session without
+   * tearing down the match for the remaining players. If the session is left
+   * empty it is cancelled. Host/current-turn pointers are repaired.
+   */
+  private static async removePlayerFromSession(gameSessionId: string, playerId: string) {
+    return prisma.$transaction(async (tx) => {
+      const session = await tx.gameSession.findUnique({
+        where: { id: gameSessionId },
+        include: { players: { orderBy: { seatOrder: 'asc' } } },
+      });
+      if (!session) return { cancelled: true, session: null };
+
+      const remaining = session.players.filter((p) => p.id !== playerId);
+
+      if (remaining.length === 0) {
+        const cancelled = await tx.gameSession.update({
+          where: { id: gameSessionId },
+          data: { status: GameStatus.CANCELLED, endedAt: new Date(), eventVersion: { increment: 1 } },
+          include: { players: { orderBy: { seatOrder: 'asc' } } },
+        });
+        return { cancelled: true, session: this.sanitizeSession(cancelled) };
+      }
+
+      await tx.gamePlayer.delete({ where: { id: playerId } });
+
+      const hostPlayerId = session.hostPlayerId === playerId ? remaining[0].id : session.hostPlayerId;
+      const currentTurnPlayerId = session.currentTurnPlayerId === playerId ? remaining[0].id : session.currentTurnPlayerId;
+
+      const updated = await tx.gameSession.update({
+        where: { id: gameSessionId },
+        data: {
+          hostPlayerId,
+          currentTurnPlayerId,
+          eventVersion: { increment: 1 },
+        },
+        include: { players: { orderBy: { seatOrder: 'asc' } } },
+      });
+
+      return { cancelled: false, session: this.sanitizeSession(updated) };
+    });
   }
 
   /**

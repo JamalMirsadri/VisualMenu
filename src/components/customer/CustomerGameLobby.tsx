@@ -293,6 +293,28 @@ export const CustomerGameLobby: React.FC<CustomerGameLobbyProps> = ({ restaurant
     }
   };
 
+  const leaveGame = async () => {
+    if (!session?.id || !token) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await customerGameService.leave(restaurantId, session.id, token);
+    } catch {
+      // The game may already be over; always release local state below.
+    } finally {
+      setBusy(false);
+    }
+    try {
+      window.localStorage.removeItem(ACTIVE_GAME_STORAGE);
+    } catch {
+      /* ignore */
+    }
+    setSession(null);
+    setPlayer(null);
+    setToken(null);
+    setStage('select');
+  };
+
   const reset = () => {
     setStage('select');
     setMode(null);
@@ -538,6 +560,7 @@ export const CustomerGameLobby: React.FC<CustomerGameLobbyProps> = ({ restaurant
                   ladders={config.ladders ?? []}
                   snakes={config.snakes ?? []}
                   onExit={onClose}
+                  onLeave={leaveGame}
                 />
               )}
 
