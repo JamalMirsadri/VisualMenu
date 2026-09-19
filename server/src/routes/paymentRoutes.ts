@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { PaymentMethod, PaymentStatus, Role } from '@prisma/client';
+import { PaymentMethod, PaymentStatus, PaymentTransactionType, Role } from '@prisma/client';
 import { prisma } from '../prisma';
 import { PaymentService } from '../services/payment/paymentService';
 import { ReconciliationService } from '../services/payment/reconciliationService';
@@ -275,27 +275,41 @@ paymentRouter.get(
         startDate,
         endDate,
         page = '1',
-        limit = '20',
+        limit = '10',
       } = req.query;
 
       const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
-      const limitNum = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 20));
+      const limitNum = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 10));
       const skip = (pageNum - 1) * limitNum;
+
+      const dateFilter = (startDate || endDate)
+        ? {
+            createdAt: {
+              ...(startDate ? { gte: new Date(String(startDate)) } : {}),
+              ...(endDate ? { lte: new Date(String(endDate)) } : {}),
+            },
+          }
+        : {};
 
       const where: any = {
         restaurantId,
         ...(status ? { status: String(status) as PaymentStatus } : {}),
         ...(method ? { method: String(method) as PaymentMethod } : {}),
+        ...dateFilter,
       };
 
-      if (startDate || endDate) {
-        where.createdAt = {
-          ...(startDate ? { gte: new Date(String(startDate)) } : {}),
-          ...(endDate ? { lte: new Date(String(endDate)) } : {}),
-        };
-      }
+      const revenueWhere: any = {
+        restaurantId,
+        ...dateFilter,
+        status: { in: [PaymentStatus.PAID, PaymentStatus.PARTIALLY_REFUNDED, PaymentStatus.REFUNDED] },
+      };
+      const outstandingWhere: any = {
+        restaurantId,
+        ...dateFilter,
+        status: { in: [PaymentStatus.UNPAID, PaymentStatus.PENDING, PaymentStatus.AUTHORIZED] },
+      };
 
-      const [total, payments] = await Promise.all([
+      const [total, payments, grossAgg, outstandingAgg, refundAgg, paidCount] = await Promise.all([
         prisma.payment.count({ where }),
         prisma.payment.findMany({
           where,
@@ -312,20 +326,46 @@ paymentRouter.get(
               },
             },
             receivedByUser: { select: { id: true, name: true, email: true } },
+            cancelledByUser: { select: { id: true, name: true, email: true } },
             transactions: { select: { id: true, type: true, amount: true, status: true, createdAt: true } },
             fiscalDocuments: { select: { id: true, documentNumber: true, status: true, issuedAt: true } },
           },
         }),
+        prisma.payment.aggregate({ where: revenueWhere, _sum: { amount: true } }),
+        prisma.payment.aggregate({ where: outstandingWhere, _sum: { amount: true } }),
+        prisma.paymentTransaction.aggregate({
+          where: {
+            payment: { restaurantId },
+            type: { in: [PaymentTransactionType.REFUND, PaymentTransactionType.PARTIAL_REFUND] },
+            status: 'SUCCESS',
+            ...dateFilter,
+          },
+          _sum: { amount: true },
+        }),
+        prisma.payment.count({ where: revenueWhere }),
       ]);
+
+      const grossAmount = Number(grossAgg._sum.amount ?? 0);
+      const refundedAmount = Number(refundAgg._sum.amount ?? 0);
+      const outstandingAmount = Number(outstandingAgg._sum.amount ?? 0);
 
       res.status(200).json({
         success: true,
-        data: payments,
-        pagination: {
-          total,
-          page: pageNum,
-          limit: limitNum,
-          totalPages: Math.ceil(total / limitNum),
+        data: {
+          payments,
+          summary: {
+            totalAmount: Math.round(grossAmount * 100) / 100,
+            totalRefunded: Math.round(refundedAmount * 100) / 100,
+            netAmount: Math.round((grossAmount - refundedAmount) * 100) / 100,
+            paidCount,
+            outstandingAmount: Math.round(outstandingAmount * 100) / 100,
+          },
+          pagination: {
+            total,
+            page: pageNum,
+            limit: limitNum,
+            totalPages: Math.ceil(total / limitNum),
+          },
         },
       });
     } catch (err) {
@@ -451,15 +491,32 @@ paymentRouter.get(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id: restaurantId } = req.params;
-      const { page = '1', limit = '20' } = req.query;
+      const { page = '1', limit = '10', startDate, endDate } = req.query;
 
       const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
-      const limitNum = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 20));
+      const limitNum = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 10));
       const skip = (pageNum - 1) * limitNum;
+
+      const dateFilter = (startDate || endDate)
+        ? {
+            createdAt: {
+              ...(startDate ? { gte: new Date(String(startDate)) } : {}),
+              ...(endDate ? { lte: new Date(String(endDate)) } : {}),
+            },
+          }
+        : {};
 
       const where = {
         restaurantId,
         method: PaymentMethod.CASH,
+        ...dateFilter,
+      };
+
+      const settledWhere = {
+        restaurantId,
+        method: PaymentMethod.CASH,
+        status: { in: [PaymentStatus.PAID, PaymentStatus.PARTIALLY_REFUNDED, PaymentStatus.REFUNDED] },
+        ...dateFilter,
       };
 
       const [total, cashPayments, allPaidCash] = await Promise.all([
@@ -478,14 +535,11 @@ paymentRouter.get(
               },
             },
             receivedByUser: { select: { id: true, name: true, email: true } },
+            cancelledByUser: { select: { id: true, name: true, email: true } },
           },
         }),
         prisma.payment.findMany({
-          where: {
-            restaurantId,
-            method: PaymentMethod.CASH,
-            status: { in: [PaymentStatus.PAID, PaymentStatus.PARTIALLY_REFUNDED, PaymentStatus.REFUNDED] },
-          },
+          where: settledWhere,
           select: {
             amount: true,
             amountReceived: true,

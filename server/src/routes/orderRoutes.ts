@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { AuditAction, OrderStatus, OrderItemStatus, Role, Prisma, PaymentMethod, PaymentStatus } from '@prisma/client';
+import { AuditAction, OrderStatus, OrderItemStatus, Role, Prisma, PaymentMethod, PaymentStatus, CancellationActorType } from '@prisma/client';
 import { prisma } from '../prisma';
 import { AuditService } from '../services/auditService';
 import { realtimeService } from '../services/realtimeService';
@@ -8,6 +8,7 @@ import { requireRestaurantAccess, authenticateToken, requirePermission, requireA
 import { orderCreationRateLimiter, orderTrackingRateLimiter } from '../middleware/rateLimiter';
 import { NifValidator } from '../services/fiscal/nifValidator';
 import { CashPaymentService } from '../services/payment/cashPaymentService';
+import { PaymentService } from '../services/payment/paymentService';
 import { CustomerService } from '../services/customerService';
 import { terminatePrivateGameByTable } from '../services/gameOrderLifecycle';
 import { hasPermission } from '../constants/permissions';
@@ -887,7 +888,7 @@ orderRouter.patch(
         }
       }
 
-      const updateData: Prisma.OrderUpdateInput = {
+      const updateData: Prisma.OrderUncheckedUpdateInput = {
         status: targetStatus,
       };
 
@@ -895,6 +896,8 @@ orderRouter.patch(
         updateData.completedAt = new Date();
       } else if (targetStatus === OrderStatus.CANCELLED) {
         updateData.cancelledAt = new Date();
+        updateData.cancelledByActorType = CancellationActorType.STAFF;
+        updateData.cancelledByUserId = req.user?.id || null;
       }
 
       // Update Order, OrderItems, and record OrderStatusHistory
@@ -926,6 +929,16 @@ orderRouter.patch(
             changedByUserId: req.user?.id || null,
           },
         });
+
+        // Cancelling an order closes any outstanding (unpaid/pending) payments.
+        if (targetStatus === OrderStatus.CANCELLED) {
+          await PaymentService.cancelPendingPaymentsForOrder(
+            tx,
+            orderId,
+            CancellationActorType.STAFF,
+            req.user?.id || null
+          );
+        }
 
         return resOrder;
       });
@@ -1136,6 +1149,9 @@ orderRouter.post(
           data: {
             status: OrderStatus.CANCELLED,
             cancelledAt: new Date(),
+            cancelledByActorType: CancellationActorType.STAFF,
+            cancelledByUserId: req.user?.id || null,
+            cancellationReason: reason || null,
           },
           include: { items: true, table: true },
         });
@@ -1155,6 +1171,15 @@ orderRouter.post(
             metadata: { reason: reason || null },
           },
         });
+
+        // Close any outstanding (unpaid/pending) payments for this order.
+        await PaymentService.cancelPendingPaymentsForOrder(
+          tx,
+          orderId,
+          CancellationActorType.STAFF,
+          req.user?.id || null,
+          reason || undefined
+        );
 
         return o;
       });

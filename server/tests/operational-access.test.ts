@@ -560,7 +560,7 @@ async function runOperationalAccessTests() {
         .get(`/api/restaurants/${restaurantA.id}/payments`)
         .set('Authorization', `Bearer ${cashierToken}`);
       if (res.status !== 200 || !res.body.success) throw new Error(`Expected 200, got ${res.status}`);
-      if (!Array.isArray(res.body.data)) throw new Error('Expected array of payments');
+      if (!res.body.data || !Array.isArray(res.body.data.payments)) throw new Error('Expected payments array');
     });
 
     await assert('27. Waiter without CONFIRM_CASH_PAYMENT cannot settle cash on /orders/:id/cash-payment (403)', async () => {

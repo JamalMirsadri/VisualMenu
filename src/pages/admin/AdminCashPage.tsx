@@ -40,6 +40,12 @@ export const AdminCashPage: React.FC = () => {
     transactionCount: 0,
   });
 
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+
   const [selectedReceipt, setSelectedReceipt] = useState<FiscalDocument | null>(null);
 
   const [exportOpen, setExportOpen] = useState(false);
@@ -52,11 +58,17 @@ export const AdminCashPage: React.FC = () => {
       const res = await paymentService.getCashOperations(activeRestaurant.id, {
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        page,
+        limit: pageSize,
       });
 
       setCashPayments(res.cashPayments);
       if (res.summary) {
         setSummary(res.summary);
+      }
+      if (res.pagination) {
+        setTotalRecords(res.pagination.total);
+        setTotalPages(res.pagination.totalPages);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load cash operations.');
@@ -67,7 +79,8 @@ export const AdminCashPage: React.FC = () => {
 
   useEffect(() => {
     fetchCashOperations();
-  }, [activeRestaurant?.id, startDate, endDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRestaurant?.id, startDate, endDate, page, pageSize]);
 
   const handleViewReceipt = async (orderId: string) => {
     try {
@@ -190,13 +203,19 @@ export const AdminCashPage: React.FC = () => {
         <input
           type="date"
           value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
+          onChange={(e) => {
+            setStartDate(e.target.value);
+            setPage(1);
+          }}
           className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-400"
         />
         <input
           type="date"
           value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
+          onChange={(e) => {
+            setEndDate(e.target.value);
+            setPage(1);
+          }}
           className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-400"
         />
       </div>
@@ -231,6 +250,7 @@ export const AdminCashPage: React.FC = () => {
                 <th className="p-4 text-right">Change Given</th>
                 <th className="p-4 text-right">Net Drawer Cash</th>
                 <th className="p-4">Settled By (Staff)</th>
+                <th className="p-4">Status</th>
                 <th className="p-4 text-right">Receipt</th>
               </tr>
             </thead>
@@ -267,6 +287,24 @@ export const AdminCashPage: React.FC = () => {
                         <span>{p.receivedByUser?.name || 'Staff Member'}</span>
                       </div>
                     </td>
+                    <td className="p-4">
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${
+                          p.status === 'CANCELLED'
+                            ? 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                            : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        }`}
+                      >
+                        {p.status}
+                      </span>
+                      {p.status === 'CANCELLED' && (
+                        <div className="mt-1 text-[10px] text-zinc-500 max-w-[160px]">
+                          {p.cancelledByUser?.name || p.cancelledByActorType || 'staff'}
+                          {p.cancelledAt ? ` · ${new Date(p.cancelledAt).toLocaleString()}` : ''}
+                          {p.cancellationReason ? ` · ${p.cancellationReason}` : ''}
+                        </div>
+                      )}
+                    </td>
                     <td className="p-4 text-right">
                       {p.orderId && (
                         <button
@@ -283,6 +321,51 @@ export const AdminCashPage: React.FC = () => {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && totalPages > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-2xl bg-zinc-900/40 border border-zinc-800/80">
+          <div className="flex items-center gap-3 text-xs text-zinc-400 flex-wrap">
+            <span>
+              Page {page} of {totalPages} · {totalRecords} records
+            </span>
+            <label className="flex items-center gap-1.5">
+              <span>Show</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-amber-400"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span>per page</span>
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-xs text-zinc-400">{page} / {totalPages}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
 

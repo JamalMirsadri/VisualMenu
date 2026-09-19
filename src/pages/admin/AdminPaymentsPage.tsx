@@ -40,12 +40,20 @@ export const AdminPaymentsPage: React.FC = () => {
     totalRefunded: number;
     netAmount: number;
     paidCount: number;
+    outstandingAmount: number;
   }>({
     totalAmount: 0,
     totalRefunded: 0,
     netAmount: 0,
     paidCount: 0,
+    outstandingAmount: 0,
   });
+
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   // Refund Modal State
   const [selectedPaymentForRefund, setSelectedPaymentForRefund] = useState<Payment | null>(null);
@@ -70,12 +78,18 @@ export const AdminPaymentsPage: React.FC = () => {
         method: methodFilter === 'ALL' ? undefined : methodFilter,
         startDate: startDate || undefined,
         endDate: endDate || undefined,
+        page,
+        limit: pageSize,
       });
 
       const paymentList = Array.isArray(res) ? res : (res?.payments || []);
       setPayments(paymentList);
-      if (res && !Array.isArray(res) && res.summary) {
-        setSummary(res.summary);
+      if (res && !Array.isArray(res)) {
+        if (res.summary) setSummary(res.summary);
+        if (res.pagination) {
+          setTotalRecords(res.pagination.total);
+          setTotalPages(res.pagination.totalPages);
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load payments.');
@@ -86,7 +100,8 @@ export const AdminPaymentsPage: React.FC = () => {
 
   useEffect(() => {
     fetchPayments();
-  }, [activeRestaurant?.id, statusFilter, methodFilter, startDate, endDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRestaurant?.id, statusFilter, methodFilter, startDate, endDate, page, pageSize]);
 
   const handleOpenRefund = (payment: Payment) => {
     setSelectedPaymentForRefund(payment);
@@ -201,7 +216,7 @@ export const AdminPaymentsPage: React.FC = () => {
       </div>
 
       {/* Financial Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
             <span>Gross Volume</span>
@@ -243,6 +258,19 @@ export const AdminPaymentsPage: React.FC = () => {
 
         <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80">
           <div className="flex items-center justify-between text-zinc-400 text-xs">
+            <span>Outstanding</span>
+            <AlertCircle className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="mt-2 text-2xl font-mono font-bold text-amber-400">
+            €{summary.outstandingAmount.toFixed(2)}
+          </div>
+          <div className="mt-1 text-[11px] text-zinc-500">
+            Unpaid / pending / authorized
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80">
+          <div className="flex items-center justify-between text-zinc-400 text-xs">
             <span>Audit Integrity</span>
             <CheckCircle2 className="w-4 h-4 text-amber-400" />
           </div>
@@ -271,7 +299,10 @@ export const AdminPaymentsPage: React.FC = () => {
         {/* Status Filter */}
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setPage(1);
+          }}
           className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-amber-400"
         >
           <option value="ALL">All Statuses</option>
@@ -287,7 +318,10 @@ export const AdminPaymentsPage: React.FC = () => {
         {/* Method Filter */}
         <select
           value={methodFilter}
-          onChange={(e) => setMethodFilter(e.target.value)}
+          onChange={(e) => {
+            setMethodFilter(e.target.value);
+            setPage(1);
+          }}
           className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-amber-400"
         >
           <option value="ALL">All Methods</option>
@@ -300,13 +334,19 @@ export const AdminPaymentsPage: React.FC = () => {
         <input
           type="date"
           value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
+          onChange={(e) => {
+            setStartDate(e.target.value);
+            setPage(1);
+          }}
           className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-400"
         />
         <input
           type="date"
           value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
+          onChange={(e) => {
+            setEndDate(e.target.value);
+            setPage(1);
+          }}
           className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-400"
         />
       </div>
@@ -374,6 +414,13 @@ export const AdminPaymentsPage: React.FC = () => {
                       >
                         {p.status}
                       </span>
+                      {p.status === 'CANCELLED' && (
+                        <div className="mt-1 text-[10px] text-zinc-500 max-w-[180px]">
+                          {p.cancelledByUser?.name || p.cancelledByActorType || 'staff'}
+                          {p.cancelledAt ? ` · ${new Date(p.cancelledAt).toLocaleString()}` : ''}
+                          {p.cancellationReason ? ` · ${p.cancellationReason}` : ''}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4 text-right font-mono font-bold text-white">
                       €{Number(p.amount).toFixed(2)}
@@ -418,6 +465,51 @@ export const AdminPaymentsPage: React.FC = () => {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && totalPages > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-2xl bg-zinc-900/40 border border-zinc-800/80">
+          <div className="flex items-center gap-3 text-xs text-zinc-400 flex-wrap">
+            <span>
+              Page {page} of {totalPages} · {totalRecords} records
+            </span>
+            <label className="flex items-center gap-1.5">
+              <span>Show</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-amber-400"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span>per page</span>
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-xs text-zinc-400">{page} / {totalPages}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
 

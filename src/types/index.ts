@@ -221,6 +221,10 @@ export interface Payment {
   failedAt?: string | null;
   refundedAt?: string | null;
   cancelledAt?: string | null;
+  cancelledByActorType?: 'CUSTOMER' | 'STAFF' | null;
+  cancelledByUserId?: string | null;
+  cancelledByUser?: { id: string; name: string; email: string } | null;
+  cancellationReason?: string | null;
   createdAt: string;
   updatedAt: string;
   transactions?: PaymentTransaction[];
@@ -263,6 +267,8 @@ export interface Order {
   } | null;
   completedAt?: string | null;
   cancelledAt?: string | null;
+  cancelledByActorType?: 'CUSTOMER' | 'STAFF' | null;
+  cancelledByUserId?: string | null;
   createdAt: string;
   updatedAt: string;
   table?: Table | null;

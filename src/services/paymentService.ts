@@ -142,6 +142,7 @@ export const paymentService = {
       totalRefunded: number;
       netAmount: number;
       paidCount: number;
+      outstandingAmount: number;
     };
   }> {
     const query = new URLSearchParams();
@@ -156,7 +157,10 @@ export const paymentService = {
   },
 
   // Cash operations audit trail (Admin)
-  async getCashOperations(restaurantId: string, params: { startDate?: string; endDate?: string } = {}): Promise<{
+  async getCashOperations(
+    restaurantId: string,
+    params: { startDate?: string; endDate?: string; page?: number; limit?: number } = {}
+  ): Promise<{
     cashPayments: Payment[];
     summary: {
       totalCashCollected: number;
@@ -164,10 +168,18 @@ export const paymentService = {
       netCashInRegister: number;
       transactionCount: number;
     };
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    };
   }> {
     const query = new URLSearchParams();
     if (params.startDate) query.append('startDate', params.startDate);
     if (params.endDate) query.append('endDate', params.endDate);
+    if (params.page) query.append('page', params.page.toString());
+    if (params.limit) query.append('limit', params.limit.toString());
 
     return apiClient.get(`/restaurants/${restaurantId}/cash-operations?${query.toString()}`);
   },

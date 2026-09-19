@@ -237,6 +237,11 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum CancellationActorType {
+  CUSTOMER
+  STAFF
+}
+
 enum PaymentTransactionType {
   SALE
   AUTHORIZATION
@@ -552,11 +557,15 @@ model Order {
   updatedAt      DateTime    @updatedAt @map("updated_at")
   completedAt    DateTime?   @map("completed_at")
   cancelledAt    DateTime?   @map("cancelled_at")
+  cancelledByActorType CancellationActorType? @map("cancelled_by_actor_type")
+  cancelledByUserId    String?                @map("cancelled_by_user_id") @db.Uuid
+  cancellationReason   String?                @map("cancellation_reason")
 
   restaurant      Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   table           Table?               @relation(fields: [tableId], references: [id], onDelete: SetNull)
   customer        Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
   assignedWaiter  UserRestaurant?      @relation("AssignedWaiterOrders", fields: [assignedWaiterUserRestaurantId], references: [id], onDelete: SetNull)
+  cancelledByUser User?                 @relation("OrderCancelledByUser", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
   items           OrderItem[]
   statusHistory   OrderStatusHistory[]
   payments        Payment[]
@@ -681,12 +690,16 @@ model Payment {
   completedAt       DateTime?     @map("completed_at")
   failedAt          DateTime?     @map("failed_at")
   cancelledAt       DateTime?     @map("cancelled_at")
+  cancelledByActorType CancellationActorType? @map("cancelled_by_actor_type")
+  cancelledByUserId    String?                @map("cancelled_by_user_id") @db.Uuid
+  cancellationReason   String?                @map("cancellation_reason")
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
 
   restaurant        Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   order             Order                @relation(fields: [orderId], references: [id], onDelete: Cascade)
   receivedByUser    User?                @relation("StaffReceivedPayments", fields: [receivedByUserId], references: [id], onDelete: SetNull)
+  cancelledByUser   User?                @relation("PaymentCancelledByUser", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
   transactions      PaymentTransaction[]
   fiscalDocuments   FiscalDocument[]
 
@@ -786,6 +799,8 @@ model User {
   auditLogs              AuditLog[]
   changedStatusHistories OrderStatusHistory[]
   paymentsAccepted       Payment[]            @relation("StaffReceivedPayments")
+  paymentsCancelled      Payment[]            @relation("PaymentCancelledByUser")
+  ordersCancelled        Order[]              @relation("OrderCancelledByUser")
   createdInvitations     OwnerInvitation[]    @relation("CreatedOwnerInvitations")
   subscriptionEvents     SubscriptionEvent[]
   notifications          Notification[]

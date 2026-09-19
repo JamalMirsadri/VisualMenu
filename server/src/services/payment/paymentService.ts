@@ -4,6 +4,7 @@ import {
   PaymentMethod,
   PaymentStatus,
   PaymentTransactionType,
+  CancellationActorType,
   AuditAction,
 } from '@prisma/client';
 import { prisma } from '../../prisma';
@@ -376,6 +377,49 @@ export class PaymentService {
       processed: true,
       providerEventId,
     };
+  }
+
+  /**
+   * Cancels a pending or unpaid payment.
+   */
+  public static async cancelPayment(paymentId: string, actorType: CancellationActorType, actorUserId?: string | null, reason?: string) {
+    return prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        status: PaymentStatus.CANCELLED,
+        cancelledAt: new Date(),
+        cancelledByActorType: actorType,
+        cancelledByUserId: actorUserId ?? null,
+        cancellationReason: reason ?? null,
+      },
+    });
+  }
+
+  /**
+   * Cancels all non-settled payments for an order within an existing transaction.
+   * PAID / PARTIALLY_REFUNDED / REFUNDED payments are intentionally untouched
+   * (refunds use the dedicated refund flow). CANCELLED never counts as revenue.
+   */
+  public static async cancelPendingPaymentsForOrder(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    actorType: CancellationActorType,
+    actorUserId?: string | null,
+    reason?: string
+  ) {
+    return tx.payment.updateMany({
+      where: {
+        orderId,
+        status: { in: [PaymentStatus.UNPAID, PaymentStatus.PENDING, PaymentStatus.AUTHORIZED] },
+      },
+      data: {
+        status: PaymentStatus.CANCELLED,
+        cancelledAt: new Date(),
+        cancelledByActorType: actorType,
+        cancelledByUserId: actorUserId ?? null,
+        cancellationReason: reason ?? null,
+      },
+    });
   }
 
   /**
