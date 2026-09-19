@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { FoodFeed } from '../components/customer/FoodFeed';
 import { CartDrawer } from '../components/customer/CartDrawer';
@@ -21,7 +21,33 @@ const MenuPageContent: React.FC = () => {
     reload,
   } = useMenuData(slug, tableNumber);
 
-  const { setRestaurantContext, setTableNumber, totalItemsCount, totalEstimate, openCart } = useCart();
+  const { setRestaurantContext, setTableNumber, totalItemsCount, totalEstimate, addPulse, openCart } = useCart();
+
+  // Auto-hide the floating "View Order Tray" bar a few seconds after each add,
+  // leaving a compact cart button so it never blocks the "Add to Order" area.
+  const [showFloatingTray, setShowFloatingTray] = useState(false);
+  const hideTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (addPulse > 0) {
+      setShowFloatingTray(true);
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+      }
+      hideTimerRef.current = window.setTimeout(() => {
+        setShowFloatingTray(false);
+        hideTimerRef.current = null;
+      }, 2500);
+    }
+  }, [addPulse]);
+
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (restaurant) {
@@ -125,10 +151,11 @@ const MenuPageContent: React.FC = () => {
         onToggleFavorite={toggleFavorite}
       />
 
-      {/* Floating Bottom Cart Bar (Appears when items are in cart) */}
+      {/* Floating Bottom Cart Bar (appears briefly after an add, then auto-hides) */}
       <AnimatePresence>
-        {totalItemsCount > 0 && (
+        {totalItemsCount > 0 && showFloatingTray && (
           <motion.div
+            key="order-tray"
             initial={{ y: 80, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
@@ -150,6 +177,26 @@ const MenuPageContent: React.FC = () => {
               </div>
             </button>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Compact cart reopen button (non-blocking, shown once tray hides) */}
+      <AnimatePresence>
+        {totalItemsCount > 0 && !showFloatingTray && (
+          <motion.button
+            key="cart-fab"
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            onClick={openCart}
+            aria-label="Open order tray"
+            className="fixed bottom-6 right-4 z-40 w-14 h-14 rounded-full bg-gradient-to-r from-amber-500 to-amber-400 text-neutral-950 shadow-2xl shadow-amber-500/30 border border-amber-300/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform cursor-pointer"
+          >
+            <ShoppingBag className="w-6 h-6" />
+            <span className="absolute -top-1 -right-1 min-w-6 h-6 px-1 rounded-full bg-neutral-950 text-amber-300 text-xs font-black flex items-center justify-center border border-amber-400">
+              {totalItemsCount}
+            </span>
+          </motion.button>
         )}
       </AnimatePresence>
 

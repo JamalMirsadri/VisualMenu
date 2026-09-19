@@ -17,6 +17,7 @@ interface CartContextType {
   taxEstimate: number;
   serviceChargeEstimate: number;
   totalEstimate: number;
+  addPulse: number;
   settings?: RestaurantSettings;
   // Actions
   addItem: (food: FoodItem, quantity?: number, note?: string) => void;
@@ -54,6 +55,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<RestaurantSettings | undefined>(undefined);
+  const [addPulse, setAddPulse] = useState<number>(0);
 
   // Restore cart from session storage if same restaurant
   useEffect(() => {
@@ -102,6 +104,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return [...prev, { food, quantity, customerNote: note }];
     });
+    setAddPulse((p) => p + 1);
     setError(null);
   };
 
@@ -227,6 +230,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         taxEstimate,
         serviceChargeEstimate,
         totalEstimate,
+        addPulse,
         settings,
         addItem,
         removeItem,
