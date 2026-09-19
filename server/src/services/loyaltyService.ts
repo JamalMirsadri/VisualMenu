@@ -20,6 +20,21 @@ function generateRawToken(): string {
   return crypto.randomBytes(TOKEN_BYTES).toString('hex');
 }
 
+// Unambiguous human-readable alphabet (no 0/O, 1/I/L) for loyalty codes.
+const LOYALTY_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+function generateLoyaltyCode(): string {
+  const pick = (len: number) => {
+    let out = '';
+    const bytes = crypto.randomBytes(len);
+    for (let i = 0; i < len; i++) {
+      out += LOYALTY_CODE_ALPHABET[bytes[i] % LOYALTY_CODE_ALPHABET.length];
+    }
+    return out;
+  };
+  return `AURA-${pick(4)}-${pick(4)}`;
+}
+
 /**
  * Returns the start of the calendar day (00:00) for the given instant in the
  * given IANA timezone, as an absolute UTC Date. Mirrors the analytics
@@ -135,6 +150,7 @@ export class LoyaltyService {
       data: {
         restaurantId,
         customerId,
+        code: generateLoyaltyCode(),
         tokenHash,
         status: LoyaltyIdentityStatus.ACTIVE,
       },
@@ -185,14 +201,35 @@ export class LoyaltyService {
     if (!rawToken || typeof rawToken !== 'string') {
       throw loyaltyError(404, 'LOYALTY_TOKEN_NOT_FOUND', 'Loyalty token not found.');
     }
-    const identity = await prisma.loyaltyIdentity.findUnique({
+    const byToken = await prisma.loyaltyIdentity.findUnique({
       where: { tokenHash: hashToken(rawToken) },
     });
+    if (byToken) {
+      if (byToken.restaurantId !== restaurantId) {
+        throw loyaltyError(404, 'LOYALTY_TOKEN_NOT_FOUND', 'Loyalty token not found.');
+      }
+      if (byToken.status !== LoyaltyIdentityStatus.ACTIVE) {
+        throw loyaltyError(410, 'LOYALTY_TOKEN_REVOKED', 'This loyalty token has been revoked.');
+      }
+      return byToken;
+    }
+    // Fall back to a human-readable loyalty code (used by staff-issued QR).
+    return this.resolveIdentityByCode(restaurantId, rawToken);
+  }
+
+  /** Resolves a human-readable loyalty code to its active identity (restaurant-scoped). */
+  static async resolveIdentityByCode(restaurantId: string, code: string) {
+    if (!code || typeof code !== 'string') {
+      throw loyaltyError(404, 'LOYALTY_CODE_NOT_FOUND', 'Loyalty code not found.');
+    }
+    const identity = await prisma.loyaltyIdentity.findUnique({
+      where: { code: code.trim().toUpperCase() },
+    });
     if (!identity || identity.restaurantId !== restaurantId) {
-      throw loyaltyError(404, 'LOYALTY_TOKEN_NOT_FOUND', 'Loyalty token not found.');
+      throw loyaltyError(404, 'LOYALTY_CODE_NOT_FOUND', 'Loyalty code not found.');
     }
     if (identity.status !== LoyaltyIdentityStatus.ACTIVE) {
-      throw loyaltyError(410, 'LOYALTY_TOKEN_REVOKED', 'This loyalty token has been revoked.');
+      throw loyaltyError(410, 'LOYALTY_CODE_REVOKED', 'This loyalty code has been revoked.');
     }
     return identity;
   }
@@ -204,6 +241,16 @@ export class LoyaltyService {
   /** Resolves a customer by loyalty token, scoped to the restaurant. */
   static async resolveCustomerByToken(restaurantId: string, rawToken: string) {
     const identity = await this.resolveIdentityByToken(restaurantId, rawToken);
+    const customer = await prisma.customer.findUnique({ where: { id: identity.customerId } });
+    if (!customer) {
+      throw loyaltyError(404, 'CUSTOMER_NOT_FOUND', 'Customer not found.');
+    }
+    return customer;
+  }
+
+  /** Resolves a customer by human-readable loyalty code, scoped to the restaurant. */
+  static async resolveCustomerByCode(restaurantId: string, code: string) {
+    const identity = await this.resolveIdentityByCode(restaurantId, code);
     const customer = await prisma.customer.findUnique({ where: { id: identity.customerId } });
     if (!customer) {
       throw loyaltyError(404, 'CUSTOMER_NOT_FOUND', 'Customer not found.');

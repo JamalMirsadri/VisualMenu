@@ -174,6 +174,19 @@ Expected new relations:
 - `revoke` marks the identity `REVOKED` so the token can no longer resolve.
 - Token resolution is rate-limited (in-memory sliding window) to prevent enumeration.
 
+### Human-readable loyalty code + admin customer directory
+
+- `LoyaltyIdentity.code` is a safe, human-readable, unambiguous loyalty code
+  (`AURA-XXXX-XXXX`) generated once at enrollment and stored as a `@unique` column.
+  It is never the `Customer.id` and never the raw token.
+- The admin directory (`GET /restaurants/:id/loyalty/customers`) is scoped to
+  customers with a `LoyaltyIdentity` and supports server-side search
+  (name/code/NIF/phone), status filter (`ACTIVE`/`REVOKED`), deterministic sort
+  (`newest`/`lastActivity`/`points`), and pagination (default 10; 10/25/50/100).
+- Staff-issued QR deep links reuse the existing `/menu/:slug?loyalty=:code` format;
+  token resolution transparently falls back to the loyalty code, so a code-based QR
+  resolves the same loyalty account without exposing any token or internal id.
+
 ### Customer resolution
 
 - Reuses the existing `Customer` model and `CustomerService.resolveForCheckout`; no

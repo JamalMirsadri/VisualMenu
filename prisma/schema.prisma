@@ -1679,6 +1679,7 @@ model LoyaltyIdentity {
   id           String                @id @default(uuid()) @db.Uuid
   restaurantId String                @map("restaurant_id") @db.Uuid
   customerId   String                @map("customer_id") @db.Uuid
+  code         String                @unique @map("code")
   tokenHash    String                @unique @map("token_hash")
   status       LoyaltyIdentityStatus @default(ACTIVE)
   issuedAt     DateTime              @default(now()) @map("issued_at")

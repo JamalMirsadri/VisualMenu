@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import { AuditAction, GameMode, LoyaltyIdentityStatus, PointsTransactionType } from '@prisma/client';
+import { AuditAction, GameMode, LoyaltyIdentityStatus, OrderStatus, PointsTransactionType, RedemptionStatus } from '@prisma/client';
 import { prisma } from '../prisma';
 import { authenticateToken, requirePermission } from '../middleware/authMiddleware';
 import { requireFeature } from '../middleware/featureMiddleware';
@@ -158,21 +158,90 @@ gameAdminRouter.put(
 // Loyalty overview + customer profile helper
 // ---------------------------------------------------------------------------
 
+async function buildLoyaltyCodeUrl(restaurantId: string, code: string): Promise<string> {
+  const restaurant = await prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { slug: true },
+  });
+  const slug = restaurant?.slug || restaurantId;
+  return `/menu/${slug}?loyalty=${encodeURIComponent(code)}`;
+}
+
+function maxDate(...dates: Array<Date | null | undefined>): Date | null {
+  const valid = dates.filter((d): d is Date => Boolean(d));
+  if (valid.length === 0) return null;
+  return new Date(Math.max(...valid.map((d) => d.getTime())));
+}
+
+async function computeCustomerStats(restaurantId: string, customerIds: string[]) {
+  const [orderAgg, redemptionAgg, ledgerAgg] = await Promise.all([
+    prisma.order.groupBy({
+      by: ['customerId'],
+      where: { restaurantId, customerId: { in: customerIds }, status: { not: OrderStatus.CANCELLED } },
+      _count: { _all: true },
+      _sum: { total: true },
+      _max: { createdAt: true },
+    }),
+    prisma.rewardRedemption.groupBy({
+      by: ['customerId'],
+      where: { restaurantId, customerId: { in: customerIds }, status: RedemptionStatus.COMPLETED },
+      _count: { _all: true },
+    }),
+    prisma.customerPointsLedger.groupBy({
+      by: ['customerId'],
+      where: { restaurantId, customerId: { in: customerIds } },
+      _max: { createdAt: true },
+    }),
+  ]);
+
+  const orderMap = new Map(orderAgg.map((o) => [o.customerId!, o]));
+  const redemptionMap = new Map(redemptionAgg.map((r) => [r.customerId!, r]));
+  const ledgerMap = new Map(ledgerAgg.map((l) => [l.customerId!, l]));
+
+  return new Map(
+    customerIds.map((id) => {
+      const order = orderMap.get(id);
+      const redemption = redemptionMap.get(id);
+      const ledger = ledgerMap.get(id);
+      return [
+        id,
+        {
+          totalOrders: order?._count._all ?? 0,
+          totalSpend: Math.round(Number(order?._sum.total ?? 0) * 100) / 100,
+          rewardsRedeemed: redemption?._count._all ?? 0,
+          lastOrderAt: order?._max.createdAt ?? null,
+          lastLedgerAt: ledger?._max.createdAt ?? null,
+        },
+      ];
+    })
+  );
+}
+
 async function buildCustomerLoyaltyProfile(restaurantId: string, customerId: string) {
   const customer = await prisma.customer.findFirst({
     where: { id: customerId, restaurantId },
-    select: { id: true, name: true, email: true, phone: true, loyaltyPoints: true },
+    select: { id: true, name: true, email: true, phone: true, loyaltyPoints: true, createdAt: true, updatedAt: true },
   });
   if (!customer) return null;
 
-  const [ledger, redemptions, identity] = await Promise.all([
+  const [ledger, redemptions, identity, restaurant, stats] = await Promise.all([
     LoyaltyService.getLedger(customer.id, restaurantId),
     LoyaltyService.listRedemptions(restaurantId, customer.id),
     prisma.loyaltyIdentity.findUnique({
       where: { restaurantId_customerId: { restaurantId, customerId } },
-      select: { status: true, issuedAt: true, revokedAt: true },
+      select: { status: true, issuedAt: true, revokedAt: true, code: true },
     }),
+    prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { name: true } }),
+    computeCustomerStats(restaurantId, [customerId]),
   ]);
+
+  const stat = stats.get(customerId);
+  const lastActivityAt = maxDate(
+    stat?.lastOrderAt,
+    stat?.lastLedgerAt,
+    customer.updatedAt,
+    customer.createdAt
+  );
 
   return {
     customer: {
@@ -181,11 +250,20 @@ async function buildCustomerLoyaltyProfile(restaurantId: string, customerId: str
       email: customer.email,
       phone: customer.phone,
       balance: customer.loyaltyPoints,
+      restaurantName: restaurant?.name ?? null,
+      loyaltyCode: identity?.code ?? null,
+      registrationDate: identity?.issuedAt ?? customer.createdAt,
+      lastActivityAt,
+      totalOrders: stat?.totalOrders ?? 0,
+      totalSpend: stat?.totalSpend ?? 0,
+      rewardsRedeemed: stat?.rewardsRedeemed ?? 0,
+      qrUrl: identity?.code ? await buildLoyaltyCodeUrl(restaurantId, identity.code) : null,
     },
     identity: identity
       ? {
           active: identity.status === LoyaltyIdentityStatus.ACTIVE,
           status: identity.status,
+          code: identity.code,
           issuedAt: identity.issuedAt,
           revokedAt: identity.revokedAt,
         }
@@ -362,6 +440,107 @@ gameAdminRouter.patch(
 // ---------------------------------------------------------------------------
 // Admin customer + points management
 // ---------------------------------------------------------------------------
+
+/**
+ * GET /api/restaurants/:restaurantId/loyalty/customers
+ * Server-side paginated customer directory (loyalty-identity scoped only).
+ * Search: name / loyalty code / NIF / phone. Filter: status. Sort: newest,
+ * lastActivity, points. Deterministic tie-break by identity id.
+ */
+gameAdminRouter.get(
+  '/restaurants/:restaurantId/loyalty/customers',
+  adminGate,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const restaurantId = req.params.restaurantId;
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+      const status = typeof req.query.status === 'string' ? req.query.status : '';
+      const sort = typeof req.query.sort === 'string' ? req.query.sort : 'newest';
+      const page = Math.max(1, parseInt(String(req.query.page), 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit), 10) || 10));
+      const skip = (page - 1) * limit;
+
+      const where: any = { restaurantId };
+      if (status === 'ACTIVE' || status === 'REVOKED') where.status = status;
+      if (search) {
+        where.OR = [
+          { code: { contains: search, mode: 'insensitive' } },
+          { customer: { name: { contains: search, mode: 'insensitive' } } },
+          { customer: { taxId: { contains: search, mode: 'insensitive' } } },
+          { customer: { phone: { contains: search, mode: 'insensitive' } } },
+        ];
+      }
+
+      let orderBy: any;
+      if (sort === 'lastActivity') {
+        orderBy = [{ customer: { updatedAt: 'desc' } }, { id: 'asc' }];
+      } else if (sort === 'points') {
+        orderBy = [{ customer: { loyaltyPoints: 'desc' } }, { id: 'asc' }];
+      } else {
+        orderBy = [{ createdAt: 'desc' }, { id: 'asc' }];
+      }
+
+      const [total, identities, restaurant] = await Promise.all([
+        prisma.loyaltyIdentity.count({ where }),
+        prisma.loyaltyIdentity.findMany({
+          where,
+          orderBy,
+          skip,
+          take: limit,
+          include: { customer: { select: { id: true, name: true, email: true, phone: true, taxId: true, loyaltyPoints: true, createdAt: true, updatedAt: true } } },
+        }),
+        prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { name: true } }),
+      ]);
+
+      const stats = await computeCustomerStats(
+        restaurantId,
+        identities.map((i) => i.customerId)
+      );
+
+      const customers = identities.map((identity) => {
+        const c = identity.customer;
+        const stat = stats.get(c.id);
+        const lastActivityAt = maxDate(
+          stat?.lastOrderAt,
+          stat?.lastLedgerAt,
+          c.updatedAt,
+          c.createdAt
+        );
+        return {
+          customerId: c.id,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          taxId: c.taxId,
+          loyaltyCode: identity.code,
+          balance: c.loyaltyPoints,
+          restaurantName: restaurant?.name ?? null,
+          registrationDate: identity.issuedAt ?? c.createdAt,
+          lastActivityAt,
+          totalOrders: stat?.totalOrders ?? 0,
+          totalSpend: stat?.totalSpend ?? 0,
+          rewardsRedeemed: stat?.rewardsRedeemed ?? 0,
+          identityStatus: identity.status,
+        };
+      });
+
+      res.status(200).json({
+        success: true,
+        data: {
+          customers,
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+          },
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 gameAdminRouter.get(
   '/restaurants/:restaurantId/loyalty/customers/lookup',

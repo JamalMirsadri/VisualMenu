@@ -52,6 +52,7 @@ export interface CustomerRedemptionDto {
 export interface CustomerIdentityDto {
   active: boolean;
   status: string;
+  code: string | null;
   issuedAt: string | null;
   revokedAt: string | null;
 }
@@ -63,10 +64,35 @@ export interface CustomerLoyaltyProfileDto {
     email: string | null;
     phone: string | null;
     balance: number;
+    restaurantName: string | null;
+    loyaltyCode: string | null;
+    registrationDate: string | null;
+    lastActivityAt: string | null;
+    totalOrders: number;
+    totalSpend: number;
+    rewardsRedeemed: number;
+    qrUrl: string | null;
   };
   identity: CustomerIdentityDto | null;
   ledger: LedgerEntryDto[];
   redemptions: CustomerRedemptionDto[];
+}
+
+export interface LoyaltyCustomerListItemDto {
+  customerId: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  taxId: string | null;
+  loyaltyCode: string;
+  balance: number;
+  restaurantName: string | null;
+  registrationDate: string | null;
+  lastActivityAt: string | null;
+  totalOrders: number;
+  totalSpend: number;
+  rewardsRedeemed: number;
+  identityStatus: 'ACTIVE' | 'REVOKED';
 }
 
 export interface RedemptionDto {
@@ -106,6 +132,19 @@ export const loyaltyAdminService = {
 
   lookupCustomer(restaurantId: string, taxId: string): Promise<CustomerLoyaltyProfileDto> {
     return apiClient.get(`/restaurants/${restaurantId}/loyalty/customers/lookup?taxId=${encodeURIComponent(taxId)}`);
+  },
+
+  listCustomers(
+    restaurantId: string,
+    params: { search?: string; status?: string; sort?: string; page?: number; limit?: number } = {}
+  ): Promise<{ customers: LoyaltyCustomerListItemDto[]; pagination: { total: number; page: number; limit: number; totalPages: number } }> {
+    const query = new URLSearchParams();
+    if (params.search) query.append('search', params.search);
+    if (params.status) query.append('status', params.status);
+    if (params.sort) query.append('sort', params.sort);
+    if (params.page) query.append('page', params.page.toString());
+    if (params.limit) query.append('limit', params.limit.toString());
+    return apiClient.get(`/restaurants/${restaurantId}/loyalty/customers?${query.toString()}`);
   },
 
   getCustomer(restaurantId: string, customerId: string): Promise<CustomerLoyaltyProfileDto> {

@@ -22,9 +22,11 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   loyaltyAdminService,
   type CustomerLoyaltyProfileDto,
+  type LoyaltyCustomerListItemDto,
   type LoyaltyOverviewDto,
   type RedemptionDto,
   type RewardDto,
@@ -352,9 +354,7 @@ export const AdminLoyaltyPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // Customer lookup + profile
-  const [lookupQuery, setLookupQuery] = useState('');
-  const [lookupLoading, setLookupLoading] = useState(false);
+  // Customer detail (drawer) + profile
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [profile, setProfile] = useState<CustomerLoyaltyProfileDto | null>(null);
 
@@ -377,6 +377,22 @@ export const AdminLoyaltyPage: React.FC = () => {
     danger?: boolean;
     action: () => void;
   } | null>(null);
+
+  // Customer directory
+  const [directory, setDirectory] = useState<LoyaltyCustomerListItemDto[]>([]);
+  const [dirSearch, setDirSearch] = useState('');
+  const [dirStatus, setDirStatus] = useState<string>('ALL');
+  const [dirSort, setDirSort] = useState<string>('newest');
+  const [dirPage, setDirPage] = useState(1);
+  const [dirPageSize, setDirPageSize] = useState(10);
+  const [dirTotal, setDirTotal] = useState(0);
+  const [dirTotalPages, setDirTotalPages] = useState(0);
+  const [dirLoading, setDirLoading] = useState(false);
+
+  // Customer detail drawer + QR
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrValue, setQrValue] = useState<string | null>(null);
 
   const loadOverview = useCallback(async () => {
     if (!restaurantId) return;
@@ -421,26 +437,51 @@ export const AdminLoyaltyPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurantId]);
 
+  const loadDirectory = useCallback(async () => {
+    if (!restaurantId) return;
+    setDirLoading(true);
+    try {
+      const data = await loyaltyAdminService.listCustomers(restaurantId, {
+        search: dirSearch || undefined,
+        status: dirStatus === 'ALL' ? undefined : dirStatus,
+        sort: dirSort,
+        page: dirPage,
+        limit: dirPageSize,
+      });
+      setDirectory(data.customers);
+      setDirTotal(data.pagination.total);
+      setDirTotalPages(data.pagination.totalPages);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load customer directory.');
+    } finally {
+      setDirLoading(false);
+    }
+  }, [restaurantId, dirSearch, dirStatus, dirSort, dirPage, dirPageSize]);
+
+  useEffect(() => {
+    loadDirectory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadDirectory]);
+
+  const openCustomer = async (item: LoyaltyCustomerListItemDto) => {
+    setDrawerOpen(true);
+    setQrOpen(false);
+    setProfile(null);
+    setLookupError(null);
+    setAdjustAmount('');
+    setAdjustReason('');
+    if (!restaurantId) return;
+    try {
+      const data = await loyaltyAdminService.getCustomer(restaurantId, item.customerId);
+      setProfile(data);
+    } catch (err: any) {
+      setLookupError(err.message || 'Failed to load customer details.');
+    }
+  };
+
   const flash = (message: string) => {
     setNotice(message);
     window.setTimeout(() => setNotice(null), 4000);
-  };
-
-  // --- Customer lookup ---
-  const handleLookup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!restaurantId || !lookupQuery.trim()) return;
-    setLookupLoading(true);
-    setLookupError(null);
-    setProfile(null);
-    try {
-      const data = await loyaltyAdminService.lookupCustomer(restaurantId, lookupQuery.trim());
-      setProfile(data);
-    } catch (err: any) {
-      setLookupError(err.message || 'Customer not found.');
-    } finally {
-      setLookupLoading(false);
-    }
   };
 
   const refreshProfile = async (customerId: string) => {
@@ -467,7 +508,7 @@ export const AdminLoyaltyPage: React.FC = () => {
       setAdjustAmount('');
       setAdjustReason('');
       setConfirm(null);
-      await Promise.all([refreshProfile(profile.customer.id), loadOverview()]);
+      await Promise.all([refreshProfile(profile.customer.id), loadOverview(), loadDirectory()]);
     } catch (err: any) {
       setError(err.message || 'Failed to adjust points.');
       setConfirm(null);
@@ -612,7 +653,7 @@ export const AdminLoyaltyPage: React.FC = () => {
           await loyaltyAdminService.revokeIdentity(restaurantId, profile.customer.id);
           flash('Loyalty identity revoked.');
           setConfirm(null);
-          await refreshProfile(profile.customer.id);
+          await Promise.all([refreshProfile(profile.customer.id), loadDirectory()]);
         } catch (err: any) {
           setError(err.message || 'Failed to revoke loyalty identity.');
           setConfirm(null);
@@ -700,211 +741,453 @@ export const AdminLoyaltyPage: React.FC = () => {
         )}
       </motion.section>
 
-      {/* 2. Customer lookup */}
+      {/* 2. Customer directory */}
       <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
-          <Search className="w-4 h-4 text-amber-400" />
-          <span>Customer Lookup</span>
+          <Users className="w-4 h-4 text-amber-400" />
+          <span>Customer Directory</span>
+          <span className="text-zinc-600">({dirTotal})</span>
           <span className="h-px flex-1 bg-zinc-800" />
         </div>
 
-        <form onSubmit={handleLookup} className="flex gap-2">
-          <div className="relative flex-1">
+        <div className="p-4 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-zinc-500" />
             <input
               type="text"
-              placeholder="Search by tax identifier (NIF)..."
-              value={lookupQuery}
-              onChange={(e) => setLookupQuery(e.target.value)}
+              placeholder="Search name, loyalty code, NIF, or phone..."
+              value={dirSearch}
+              onChange={(e) => {
+                setDirSearch(e.target.value);
+                setDirPage(1);
+              }}
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
             />
           </div>
-          <button
-            type="submit"
-            disabled={lookupLoading}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs transition disabled:opacity-50"
+          <select
+            value={dirStatus}
+            onChange={(e) => {
+              setDirStatus(e.target.value);
+              setDirPage(1);
+            }}
+            className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-amber-400"
           >
-            {lookupLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-            Lookup
-          </button>
-        </form>
+            <option value="ALL">All Statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="REVOKED">Revoked</option>
+          </select>
+          <select
+            value={dirSort}
+            onChange={(e) => {
+              setDirSort(e.target.value);
+              setDirPage(1);
+            }}
+            className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-amber-400"
+          >
+            <option value="newest">Newest</option>
+            <option value="lastActivity">Last Activity</option>
+            <option value="points">Points</option>
+          </select>
+        </div>
 
-        {lookupError && (
-          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{lookupError}</span>
+        {dirLoading && directory.length === 0 ? (
+          <div className="p-12 text-center text-zinc-500">
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-amber-400" />
+            <p className="text-sm">Loading customer directory...</p>
+          </div>
+        ) : directory.length === 0 ? (
+          <div className="p-12 text-center text-zinc-500 bg-zinc-900/30 rounded-2xl border border-zinc-800/60">
+            <Users className="w-8 h-8 mx-auto mb-2 text-zinc-600" />
+            <p className="text-sm">No loyalty customers found.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-zinc-800/80 bg-zinc-900/40">
+            <table className="w-full text-left text-xs text-zinc-300">
+              <thead className="bg-zinc-900/80 text-zinc-400 font-semibold border-b border-zinc-800 uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="p-4">Customer</th>
+                  <th className="p-4">Loyalty Code</th>
+                  <th className="p-4 text-right">Points</th>
+                  <th className="p-4">Status</th>
+                  <th className="p-4">Last Activity</th>
+                  <th className="p-4 text-right">Orders</th>
+                  <th className="p-4 text-right">Spend</th>
+                  <th className="p-4 text-right">Redeemed</th>
+                  <th className="p-4 text-right">QR</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-800/60">
+                {directory.map((c) => (
+                  <tr
+                    key={c.customerId}
+                    onClick={() => openCustomer(c)}
+                    className="hover:bg-zinc-800/30 transition cursor-pointer"
+                  >
+                    <td className="p-4">
+                      <div className="font-medium text-white">{c.name || 'Guest Customer'}</div>
+                      <div className="text-[11px] text-zinc-500">{c.restaurantName || '—'}</div>
+                    </td>
+                    <td className="p-4 font-mono text-amber-300">{c.loyaltyCode}</td>
+                    <td className="p-4 text-right font-mono font-bold text-white">{c.balance}</td>
+                    <td className="p-4">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          c.identityStatus === 'ACTIVE'
+                            ? 'bg-emerald-500/15 text-emerald-400'
+                            : 'bg-zinc-800 text-zinc-500'
+                        }`}
+                      >
+                        {c.identityStatus}
+                      </span>
+                    </td>
+                    <td className="p-4 text-zinc-400">{formatDate(c.lastActivityAt)}</td>
+                    <td className="p-4 text-right text-zinc-400">{c.totalOrders}</td>
+                    <td className="p-4 text-right font-mono text-zinc-300">€{c.totalSpend.toFixed(2)}</td>
+                    <td className="p-4 text-right text-zinc-400">{c.rewardsRedeemed}</td>
+                    <td className="p-4 text-right">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const slug = activeRestaurant?.slug || '';
+                          setQrValue(`${window.location.origin}/menu/${slug}?loyalty=${encodeURIComponent(c.loyaltyCode)}`);
+                          setQrOpen(true);
+                        }}
+                        className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 transition"
+                        title="View loyalty QR"
+                      >
+                        <QrCode className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
-        {profile && (
-          <div className="space-y-4">
-            {/* Profile header */}
-            <div className={cardClass}>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-white">{profile.customer.name || 'Guest Customer'}</div>
-                  <div className="text-xs text-zinc-500 mt-0.5">
-                    {[profile.customer.email, profile.customer.phone].filter(Boolean).join(' · ') || 'No contact details'}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right">
-                    <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Balance</div>
-                    <div className="text-2xl font-bold text-amber-300">{profile.customer.balance}</div>
-                  </div>
-                  <div className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
-                    profile.identity?.active
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                      : 'bg-zinc-900 border-zinc-700 text-zinc-400'
-                  }`}>
-                    <QrCode className="w-4 h-4" />
-                    {profile.identity?.active ? 'QR Active' : profile.identity ? 'QR Revoked' : 'No QR Identity'}
-                  </div>
-                </div>
-              </div>
-
-              {profile.identity?.active && (
-                <div className="mt-4 flex justify-end">
-                  <button
-                    onClick={openRevokeIdentity}
-                    className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-red-400 transition"
-                  >
-                    <KeyRound className="w-3.5 h-3.5" />
-                    Revoke QR Token
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Adjust form */}
-            <div className={cardClass}>
-              <div className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                <Coins className="w-4 h-4 text-amber-400" />
-                Manual Point Adjustment
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className={labelClass}>Action</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAdjustMode('add')}
-                      className={`px-3 py-2.5 rounded-xl text-xs font-semibold border transition ${
-                        adjustMode === 'add'
-                          ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                          : 'bg-zinc-900 border-zinc-800 text-zinc-400'
-                      }`}
-                    >
-                      Add
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAdjustMode('remove')}
-                      className={`px-3 py-2.5 rounded-xl text-xs font-semibold border transition ${
-                        adjustMode === 'remove'
-                          ? 'bg-red-500/20 border-red-500/40 text-red-300'
-                          : 'bg-zinc-900 border-zinc-800 text-zinc-400'
-                      }`}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className={labelClass}>Amount</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={adjustAmount}
-                    onChange={(e) => setAdjustAmount(e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Reason</label>
-                  <input
-                    type="text"
-                    value={adjustReason}
-                    onChange={(e) => setAdjustReason(e.target.value)}
-                    className={inputClass}
-                    placeholder="e.g. Goodwill credit"
-                  />
-                </div>
-              </div>
-              <div className="mt-4 flex justify-end">
-                <button
-                  onClick={openAdjustConfirm}
-                  disabled={adjustBusy}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs transition disabled:opacity-50"
+        {dirTotalPages > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 rounded-2xl bg-zinc-900/40 border border-zinc-800/80">
+            <div className="flex items-center gap-3 text-xs text-zinc-400 flex-wrap">
+              <span>
+                Page {dirPage} of {dirTotalPages} · {dirTotal} records
+              </span>
+              <label className="flex items-center gap-1.5">
+                <span>Show</span>
+                <select
+                  value={dirPageSize}
+                  onChange={(e) => {
+                    setDirPageSize(Number(e.target.value));
+                    setDirPage(1);
+                  }}
+                  className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-amber-400"
                 >
-                  <Save className="w-3.5 h-3.5" />
-                  Review Adjustment
-                </button>
-              </div>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+                <span>per page</span>
+              </label>
             </div>
-
-            {/* Ledger */}
-            <div className={cardClass}>
-              <div className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-amber-400" />
-                Points History
-              </div>
-              {profile.ledger.length === 0 ? (
-                <p className="text-xs text-zinc-500">No point transactions yet.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-zinc-300">
-                    <thead className="text-zinc-500 uppercase tracking-wider text-[10px] border-b border-zinc-800">
-                      <tr>
-                        <th className="py-2 pr-3">Type</th>
-                        <th className="py-2 pr-3">Amount</th>
-                        <th className="py-2 pr-3">Balance After</th>
-                        <th className="py-2">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-800/60">
-                      {profile.ledger.map((entry) => (
-                        <tr key={entry.id}>
-                          <td className="py-2 pr-3 text-zinc-400">{TRANSACTION_LABELS[entry.type] || entry.type}</td>
-                          <td className={`py-2 pr-3 font-mono ${entry.amount > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {formatPoints(entry.amount)}
-                          </td>
-                          <td className="py-2 pr-3 font-mono text-white">{entry.balanceAfter}</td>
-                          <td className="py-2 text-zinc-500">{formatDate(entry.createdAt)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-
-            {/* Customer redemptions */}
-            <div className={cardClass}>
-              <div className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                <Gift className="w-4 h-4 text-amber-400" />
-                Rewards Redeemed
-              </div>
-              {profile.redemptions.length === 0 ? (
-                <p className="text-xs text-zinc-500">No redemptions for this customer.</p>
-              ) : (
-                <div className="space-y-2">
-                  {profile.redemptions.map((r) => (
-                    <div key={r.id} className="flex items-center justify-between text-xs text-zinc-400">
-                      <span className="text-white">{r.reward?.name || 'Reward'}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-amber-300">-{r.pointsSpent}</span>
-                        <span className="text-zinc-600">{r.status}</span>
-                        <span className="text-zinc-600">{formatDate(r.redeemedAt)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setDirPage((p) => Math.max(1, p - 1))}
+                disabled={dirPage <= 1}
+                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="text-xs text-zinc-400">{dirPage} / {dirTotalPages}</span>
+              <button
+                onClick={() => setDirPage((p) => Math.min(dirTotalPages, p + 1))}
+                disabled={dirPage >= dirTotalPages}
+                className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
             </div>
           </div>
         )}
       </motion.section>
+
+      {/* Customer detail drawer */}
+      <AnimatePresence>
+        {drawerOpen && (
+          <div className="fixed inset-0 z-50 flex justify-end">
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'tween', duration: 0.2 }}
+              className="relative w-full max-w-2xl bg-zinc-950 border-l border-zinc-800 h-full overflow-y-auto"
+            >
+              <div className="sticky top-0 z-10 flex items-center justify-between gap-4 px-6 py-4 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-base font-bold text-white">Customer Details</h3>
+                </div>
+                <button onClick={() => setDrawerOpen(false)} className="p-2 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="px-6 py-5 space-y-4">
+                {lookupError && (
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{lookupError}</span>
+                  </div>
+                )}
+
+                {!profile ? (
+                  <div className="p-12 text-center text-zinc-500">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-amber-400" />
+                    <p className="text-sm">Loading customer details...</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Header */}
+                    <div className={cardClass}>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-white">{profile.customer.name || 'Guest Customer'}</div>
+                          <div className="text-xs text-zinc-500 mt-0.5">
+                            {[profile.customer.email, profile.customer.phone].filter(Boolean).join(' · ') || 'No contact details'}
+                          </div>
+                          {profile.customer.loyaltyCode && (
+                            <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 font-mono text-amber-300 text-xs">
+                              <QrCode className="w-3.5 h-3.5" />
+                              {profile.customer.loyaltyCode}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Balance</div>
+                            <div className="text-2xl font-bold text-amber-300">{profile.customer.balance}</div>
+                          </div>
+                          <div className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                            profile.identity?.active
+                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                              : 'bg-zinc-900 border-zinc-700 text-zinc-400'
+                          }`}>
+                            <QrCode className="w-4 h-4" />
+                            {profile.identity?.active ? 'QR Active' : profile.identity ? 'QR Revoked' : 'No QR Identity'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Stats */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                        <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                          <div className="text-[10px] text-zinc-500 uppercase">Registered</div>
+                          <div className="text-xs font-semibold text-white mt-1">{formatDate(profile.customer.registrationDate)}</div>
+                        </div>
+                        <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                          <div className="text-[10px] text-zinc-500 uppercase">Last Activity</div>
+                          <div className="text-xs font-semibold text-white mt-1">{formatDate(profile.customer.lastActivityAt)}</div>
+                        </div>
+                        <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                          <div className="text-[10px] text-zinc-500 uppercase">Orders / Spend</div>
+                          <div className="text-xs font-semibold text-white mt-1">
+                            {profile.customer.totalOrders} · €{profile.customer.totalSpend.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                          <div className="text-[10px] text-zinc-500 uppercase">Rewards Redeemed</div>
+                          <div className="text-xs font-semibold text-white mt-1">{profile.customer.rewardsRedeemed}</div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex justify-end gap-2">
+                        {profile.customer.qrUrl && (
+                          <button
+                            onClick={() => {
+                              setQrValue(
+                                profile.customer.qrUrl!.startsWith('/')
+                                  ? `${window.location.origin}${profile.customer.qrUrl}`
+                                  : profile.customer.qrUrl!
+                              );
+                              setQrOpen(true);
+                            }}
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 text-xs font-bold transition"
+                          >
+                            <QrCode className="w-3.5 h-3.5" />
+                            Show QR
+                          </button>
+                        )}
+                        {profile.identity?.active && (
+                          <button
+                            onClick={openRevokeIdentity}
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-semibold text-red-400 transition"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                            Revoke QR
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Adjust form */}
+                    <div className={cardClass}>
+                      <div className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                        <Coins className="w-4 h-4 text-amber-400" />
+                        Manual Point Adjustment
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className={labelClass}>Action</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setAdjustMode('add')}
+                              className={`px-3 py-2.5 rounded-xl text-xs font-semibold border transition ${
+                                adjustMode === 'add'
+                                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                                  : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                              }`}
+                            >
+                              Add
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAdjustMode('remove')}
+                              className={`px-3 py-2.5 rounded-xl text-xs font-semibold border transition ${
+                                adjustMode === 'remove'
+                                  ? 'bg-red-500/20 border-red-500/40 text-red-300'
+                                  : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                              }`}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className={labelClass}>Amount</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={adjustAmount}
+                            onChange={(e) => setAdjustAmount(e.target.value)}
+                            className={inputClass}
+                          />
+                        </div>
+                        <div>
+                          <label className={labelClass}>Reason</label>
+                          <input
+                            type="text"
+                            value={adjustReason}
+                            onChange={(e) => setAdjustReason(e.target.value)}
+                            className={inputClass}
+                            placeholder="e.g. Goodwill credit"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-4 flex justify-end">
+                        <button
+                          onClick={openAdjustConfirm}
+                          disabled={adjustBusy}
+                          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-bold text-xs transition disabled:opacity-50"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          Review Adjustment
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Ledger */}
+                    <div className={cardClass}>
+                      <div className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-amber-400" />
+                        Points History
+                      </div>
+                      {profile.ledger.length === 0 ? (
+                        <p className="text-xs text-zinc-500">No point transactions yet.</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs text-zinc-300">
+                            <thead className="text-zinc-500 uppercase tracking-wider text-[10px] border-b border-zinc-800">
+                              <tr>
+                                <th className="py-2 pr-3">Type</th>
+                                <th className="py-2 pr-3">Amount</th>
+                                <th className="py-2 pr-3">Balance After</th>
+                                <th className="py-2">Date</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-800/60">
+                              {profile.ledger.map((entry) => (
+                                <tr key={entry.id}>
+                                  <td className="py-2 pr-3 text-zinc-400">{TRANSACTION_LABELS[entry.type] || entry.type}</td>
+                                  <td className={`py-2 pr-3 font-mono ${entry.amount > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {formatPoints(entry.amount)}
+                                  </td>
+                                  <td className="py-2 pr-3 font-mono text-white">{entry.balanceAfter}</td>
+                                  <td className="py-2 text-zinc-500">{formatDate(entry.createdAt)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Redemptions */}
+                    <div className={cardClass}>
+                      <div className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                        <Gift className="w-4 h-4 text-amber-400" />
+                        Rewards Redeemed
+                      </div>
+                      {profile.redemptions.length === 0 ? (
+                        <p className="text-xs text-zinc-500">No redemptions for this customer.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {profile.redemptions.map((r) => (
+                            <div key={r.id} className="flex items-center justify-between text-xs text-zinc-400">
+                              <span className="text-white">{r.reward?.name || 'Reward'}</span>
+                              <div className="flex items-center gap-3">
+                                <span className="font-mono text-amber-300">-{r.pointsSpent}</span>
+                                <span className="text-zinc-600">{r.status}</span>
+                                <span className="text-zinc-600">{formatDate(r.redeemedAt)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* QR modal */}
+      <AnimatePresence>
+        {qrOpen && qrValue && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setQrOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="relative w-full max-w-sm bg-white rounded-2xl p-6 text-center"
+            >
+              <div className="flex justify-center">
+                <QRCodeSVG value={qrValue} size={220} bgColor="#ffffff" fgColor="#18181b" level="M" />
+              </div>
+              <p className="mt-4 text-[11px] text-zinc-600 break-all font-mono">{qrValue}</p>
+              <button
+                onClick={() => setQrOpen(false)}
+                className="mt-4 px-5 py-2.5 rounded-xl bg-zinc-900 text-white text-xs font-semibold"
+              >
+                Close
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* 4. Rewards management */}
       <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
